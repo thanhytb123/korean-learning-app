@@ -122,26 +122,39 @@ const KoreanLearningApp = () => {
         messages: [
           {
             role: 'system',
-            content: `Korean teacher. Check ONLY grammar/vocabulary errors. NEVER mark missing punctuation as error.
+            content: `Korean teacher. Smart grammar checker.
 
-RULES:
-1. Always add proper punctuation (periods, commas) to text
-2. Missing punctuation is NOT an error - it's normal in speech
-3. Only mark as error if actual grammar/vocabulary mistake
-4. Return valid JSON only
+CRITICAL RULES:
+1. Add punctuation to complete sentences
+2. Missing punctuation alone is NOT error
+3. **INCOMPLETE SENTENCE = ERROR**
+   - Sentence needs: Subject + Predicate (verb/adjective)
+   - "저는" alone = INCOMPLETE (no predicate) → ERROR
+   - "밥 먹었어요" = COMPLETE (predicate exists, subject implied) → OK
+   - "네 밥 먹었어요" = COMPLETE (2 sentences) → OK, add periods
+4. Check: Completeness, grammar, vocabulary, word order
 
+Return JSON:
 {
   "isCorrect": true/false,
-  "corrected": "text with punctuation added",
-  "errorType": "grammar|vocabulary|word-order|none",
-  "explanation": "Vietnamese explanation (ONLY if real error, not punctuation)"
+  "corrected": "corrected text with punctuation",
+  "errorType": "incomplete|grammar|vocabulary|word-order|none",
+  "explanation": "Vietnamese explanation ONLY if error"
 }
 
-Format explanation as:
-🔍 Lỗi: [error description]
-❌ Tại sao sai: [reason]
-✅ Cách sửa: [correction with examples]
-💡 Lưu ý: [tips]`
+Explanation format (if error):
+🔍 Lỗi: [error type description]
+❌ Tại sao sai: [reason with grammar explanation]
+✅ Cách sửa đúng: [correction + examples]
+💡 Lưu ý: [grammar notes]
+
+Examples:
+- Input: "저는" → ERROR (incomplete)
+  {"isCorrect": false, "corrected": "저는 학생이에요.", "errorType": "incomplete", "explanation": "🔍 Lỗi: Câu chưa hoàn chỉnh..."}
+- Input: "밥 먹었어요" → OK
+  {"isCorrect": true, "corrected": "밥 먹었어요.", "errorType": "none"}
+- Input: "네 밥 먹었어요" → OK
+  {"isCorrect": true, "corrected": "네. 밥 먹었어요.", "errorType": "none"}`
           },
           { 
             role: 'user', 
@@ -167,7 +180,7 @@ Format explanation as:
         };
       }
 
-      const hasRealError = correction.errorType && correction.errorType !== 'none' && correction.errorType !== 'punctuation';
+      const hasRealError = correction.errorType && correction.errorType !== 'none';
       
       const userMsg = {
         id: Date.now(),
@@ -212,21 +225,7 @@ STRICT RULES:
 3. Grammar: ONLY patterns in your response (2-3 patterns max)
 4. Vietnamese explanations in vocabulary/grammar
 5. Detect if user question or statement, respond appropriately
-6. NO extra text outside JSON
-
-Example:
-User asks: "밥 먹었어요?"
-Good JSON:
-{
-  "response": "네,, 먹었어요! 맛있었어요.",
-  "vocabulary": [
-    {"word": "먹다", "meaning": "ăn", "pronunciation": "mŏkda", "example": "밥 먹었어요 (Đã ăn cơm)"},
-    {"word": "맛있다", "meaning": "ngon", "pronunciation": "masitda", "example": "맛있었어요 (Đã ngon)"}
-  ],
-  "grammar": [
-    {"pattern": "-었어요", "explanation": "Thì quá khứ lịch sự", "usage": "Nói về hành động đã xảy ra", "examples": ["먹었어요 (đã ăn)", "갔어요 (đã đi)"]}
-  ]
-}`
+6. NO extra text outside JSON`
           },
           ...recentMessages,
           { 
@@ -245,7 +244,6 @@ Good JSON:
         let text = aiData.choices[0].message.content;
         text = text.replace(/``````/g, '').trim();
         
-        // Try to extract JSON if wrapped in extra text
         const jsonMatch = text.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           text = jsonMatch[0];
@@ -253,14 +251,12 @@ Good JSON:
         
         aiResult = JSON.parse(text);
         
-        // Validate required fields
         if (!aiResult.response || typeof aiResult.response !== 'string') {
           throw new Error('Invalid response structure');
         }
       } catch (e) {
         console.error('JSON parse error:', e);
         const rawText = aiData.choices[0].message.content;
-        // Extract Korean text (remove JSON artifacts)
         const koreanTextMatch = rawText.match(/[가-힣\s\.,!?]+/g);
         const cleanedText = koreanTextMatch ? koreanTextMatch.join(' ').trim() : '죄송합니다. 다시 말씀해 주세요.';
         
