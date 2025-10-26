@@ -99,6 +99,7 @@ const KoreanLearningApp = () => {
     setIsProcessing(true);
     
     try {
+      // Step 1: Check grammar (fast)
       const correctionResponse = await callOpenAI('/v1/chat/completions', {
         model: 'gpt-4o-mini',
         messages: [
@@ -107,9 +108,9 @@ const KoreanLearningApp = () => {
             content: `Korean teacher. Check grammar. Return JSON:
 {"isCorrect": true/false, "corrected": "fixed", "details": "Vietnamese explanation"}`
           },
-          { role: 'user', content: `Check: "${userText}"` }
+          { role: 'user', content: userText }
         ],
-        temperature: 0.2
+        temperature: 0.1
       });
       
       const correctionData = await correctionResponse.json();
@@ -138,46 +139,23 @@ const KoreanLearningApp = () => {
         return;
       }
       
+      // Step 2: Get AI response (optimized prompt)
       const aiResponse = await callOpenAI('/v1/chat/completions', {
         model: 'gpt-4o-mini',
         messages: [
           {
             role: 'system',
-            content: `Korean teacher. CRITICAL RULES:
-
-1. Response MUST be 100% Korean (한국어)
-2. Student level: ${settings.userLevel.join(', ') || 'beginner'}
-3. Return ONLY this JSON format:
-
+            content: `Korean teacher. Response 100% Korean. Return JSON:
 {
-  "response": "Natural Korean response",
-  "vocabulary": [
-    {
-      "word": "Korean word",
-      "meaning": "Vietnamese meaning",
-      "pronunciation": "romanization",
-      "example": "Example sentence with this word in Korean with Vietnamese translation"
-    }
-  ],
-  "grammar": [
-    {
-      "pattern": "Grammar pattern (e.g., -아/어요)",
-      "explanation": "Detailed Vietnamese explanation of what this grammar does",
-      "usage": "When and how to use this pattern",
-      "examples": [
-        "Korean example 1 (Vietnamese translation)",
-        "Korean example 2 (Vietnamese translation)",
-        "Korean example 3 (Vietnamese translation)"
-      ]
-    }
-  ]
+  "response": "Korean response",
+  "vocabulary": [{"word": "단어", "meaning": "nghĩa", "pronunciation": "phát âm", "example": "VD"}],
+  "grammar": [{"pattern": "문법", "explanation": "Giải thích", "usage": "Cách dùng", "examples": ["VD1", "VD2"]}]
 }
-
-IMPORTANT: List ALL grammar patterns used in your response. Include 4-6 vocabulary words and 3-5 grammar patterns with detailed examples.`
+Include 4-5 vocabulary + 2-3 grammar patterns.`
           },
           { role: 'user', content: correction.corrected }
         ],
-        temperature: 0.7
+        temperature: 0.5
       });
       
       const aiData = await aiResponse.json();
@@ -204,7 +182,9 @@ IMPORTANT: List ALL grammar patterns used in your response. Include 4-6 vocabula
       };
       
       setMessages(prev => [...prev, aiMsg]);
-      await playTTS(aiMsg.id, aiResult.response);
+      
+      // Step 3: Play TTS (parallel, don't wait)
+      playTTS(aiMsg.id, aiResult.response);
       
     } catch (error) {
       alert(`Lỗi: ${error.message}`);
@@ -221,7 +201,7 @@ IMPORTANT: List ALL grammar patterns used in your response. Include 4-6 vocabula
         model: 'tts-1',
         input: text,
         voice: settings.voiceGender === 'female' ? 'nova' : 'onyx',
-        speed: 0.85
+        speed: 0.9
       });
       
       const audioBlob = await ttsResponse.blob();
@@ -313,9 +293,9 @@ IMPORTANT: List ALL grammar patterns used in your response. Include 4-6 vocabula
         )}
         
         {messages.map((msg) => (
-          <div key={msg.id} style={{marginBottom: '15px', width: '100%'}}>
+          <div key={msg.id} style={{marginBottom: '15px', width: '100%', display: 'flex', justifyContent: msg.type === 'user' ? 'flex-end' : 'flex-start'}}>
             {msg.type === 'user' ? (
-              <div style={{background: msg.isCorrect ? '#e3f2fd' : '#ffebee', padding: '15px', borderRadius: '15px', maxWidth: '85%', marginLeft: 'auto'}}>
+              <div style={{background: msg.isCorrect ? '#e3f2fd' : '#ffebee', padding: '15px', borderRadius: '15px', display: 'inline-block', maxWidth: '85%'}}>
                 {!msg.isCorrect && (
                   <div style={{textDecoration: 'line-through', color: '#f44336', marginBottom: '8px'}}>
                     {msg.originalText}
@@ -331,7 +311,7 @@ IMPORTANT: List ALL grammar patterns used in your response. Include 4-6 vocabula
                 )}
               </div>
             ) : (
-              <div style={{background: '#f5f5f5', padding: '15px', borderRadius: '15px', maxWidth: '85%'}}>
+              <div style={{background: '#f5f5f5', padding: '15px', borderRadius: '15px', display: 'inline-block', maxWidth: '85%'}}>
                 <div style={{fontSize: '16px', fontWeight: '500', marginBottom: '10px'}}>{msg.text}</div>
                 
                 <div style={{display: 'flex', gap: '8px', marginTop: '12px'}}>
@@ -405,7 +385,7 @@ IMPORTANT: List ALL grammar patterns used in your response. Include 4-6 vocabula
         
         {isProcessing && (
           <div style={{marginBottom: '15px', width: '100%'}}>
-            <div style={{background: '#f5f5f5', padding: '15px', borderRadius: '15px', maxWidth: '85%'}}>
+            <div style={{background: '#f5f5f5', padding: '15px', borderRadius: '15px', display: 'inline-block'}}>
               <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
                 <div className="typing-indicator">
                   <span></span>
