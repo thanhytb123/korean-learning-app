@@ -16,6 +16,7 @@ const KoreanLearningApp = () => {
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const recognitionRef = useRef(null);
+  const hasReceivedResultRef = useRef(false);
 
   const addDebugLog = (message) => {
     console.log(message);
@@ -69,8 +70,8 @@ const KoreanLearningApp = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     recognitionRef.current = new SpeechRecognition();
     recognitionRef.current.lang = 'ko-KR';
-    recognitionRef.current.continuous = false;
-    recognitionRef.current.interimResults = false;
+    recognitionRef.current.continuous = true; // Cho phép nhận diện liên tục
+    recognitionRef.current.interimResults = true; // Hiển thị kết quả tạm thời
     recognitionRef.current.maxAlternatives = 1;
     addDebugLog('✅ Speech Recognition initialized');
     
@@ -79,7 +80,7 @@ const KoreanLearningApp = () => {
         try {
           recognitionRef.current.stop();
         } catch (e) {
-          // Ignore errors on cleanup
+          // Ignore
         }
       }
     };
@@ -91,8 +92,13 @@ const KoreanLearningApp = () => {
       return;
     }
     
+    if (isProcessing) {
+      return;
+    }
+    
     addDebugLog('▶️ Starting recording...');
     setIsRecording(true);
+    hasReceivedResultRef.current = false;
     audioChunksRef.current = [];
     
     try {
@@ -114,25 +120,53 @@ const KoreanLearningApp = () => {
       addDebugLog('🎙️ MediaRecorder started');
       
       if (recognitionRef.current) {
-        // Set up event handlers
         recognitionRef.current.onresult = async (event) => {
-          const transcript = event.results[0][0].transcript;
-          const confidence = event.results[0][0].confidence;
-          addDebugLog(`🎯 Recognized: "${transcript}" (${(confidence * 100).toFixed(0)}%)`);
+          const lastResultIndex = event.results.length - 1;
+          const transcript = event.results[lastResultIndex][0].transcript;
+          const isFinal = event.results[lastResultIndex].isFinal;
+          const confidence = event.results[lastResultIndex][0].confidence;
           
-          if (transcript && transcript.trim().length > 0) {
-            await processUserInput(transcript);
+          if (isFinal && !hasReceivedResultRef.current) {
+            hasReceivedResultRef.current = true;
+            addDebugLog(`🎯 FINAL: "${transcript}" (${(confidence * 100).toFixed(0)}%)`);
+            
+            // Tự động dừng
+            setIsRecording(false);
+            
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+              mediaRecorderRef.current.stop();
+              mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+            }
+            
+            try {
+              if (recognitionRef.current) {
+                recognitionRef.current.stop();
+              }
+            } catch (e) {
+              // Ignore
+            }
+            
+            if (transcript && transcript.trim().length > 0) {
+              await processUserInput(transcript);
+            } else {
+              alert('Không nhận diện được. Hãy thử lại!');
+            }
+          } else if (!isFinal) {
+            addDebugLog(`🔄 Interim: "${transcript}"`);
           }
         };
         
         recognitionRef.current.onerror = (event) => {
           addDebugLog(`❌ Speech error: ${event.error}`);
+          
           if (event.error === 'no-speech') {
-            alert('Không nghe thấy giọng nói. Hãy nói TO và RÕ hơn!');
+            setIsRecording(false);
+            alert('Không nghe thấy giọng nói!\n\n💡 Mẹo:\n- Đợi 1 giây sau khi nhấn nút\n- Nói TO và RÕ\n- Giữ nút khi đang nói\n- Thử nói: "안녕하세요"');
           } else if (event.error === 'audio-capture') {
-            alert('Lỗi microphone. Kiểm tra lại quyền truy cập!');
+            setIsRecording(false);
+            alert('Lỗi microphone! Kiểm tra lại quyền truy cập.');
           } else if (event.error !== 'aborted') {
-            alert(`Lỗi nhận diện: ${event.error}`);
+            addDebugLog(`⚠️ Other error: ${event.error}`);
           }
         };
         
@@ -141,7 +175,7 @@ const KoreanLearningApp = () => {
         };
         
         recognitionRef.current.onstart = () => {
-          addDebugLog('🎤 Speech recognition started - HÃY NÓI NGAY!');
+          addDebugLog('🎤 Speech recognition started - ĐỢI 1 GIÂY RỒI NÓI!');
         };
         
         recognitionRef.current.onspeechstart = () => {
@@ -149,20 +183,12 @@ const KoreanLearningApp = () => {
         };
         
         recognitionRef.current.onspeechend = () => {
-          addDebugLog('🔇 Speech ended, processing...');
-        };
-        
-        recognitionRef.current.onaudiostart = () => {
-          addDebugLog('🔊 Audio input started');
-        };
-        
-        recognitionRef.current.onaudioend = () => {
-          addDebugLog('🔇 Audio input ended');
+          addDebugLog('🔇 Speech ended, waiting for result...');
         };
         
         try {
           recognitionRef.current.start();
-          addDebugLog('✅ Recognition started - NÓI TIẾNG HÀN NGAY!');
+          addDebugLog('✅ Recognition started');
         } catch (e) {
           addDebugLog(`❌ Start error: ${e.message}`);
         }
@@ -177,18 +203,30 @@ const KoreanLearningApp = () => {
   const handleMouseUp = () => {
     if (!isRecording) return;
     
-    addDebugLog('⏸️ Stopping recording...');
-    setIsRecording(false);
+    addDebugLog('⏸️ Button released - đợi kết quả...');
     
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-      
-      mediaRecorderRef.current.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
-        addDebugLog(`📦 Audio blob size: ${audioBlob.size} bytes`);
-      };
-    }
+    // Đợi 2 giây để Speech API xử lý xong
+    setTimeout(() => {
+      if (isRecording && !hasReceivedResultRef.current) {
+        addDebugLog('⚠️ Timeout - không nhận được kết quả');
+        setIsRecording(false);
+        
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+          mediaRecorderRef.current.stop();
+          mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+        }
+        
+        try {
+          if (recognitionRef.current) {
+            recognitionRef.current.stop();
+          }
+        } catch (e) {
+          // Ignore
+        }
+        
+        alert('Không nhận diện được!\n\n💡 Hãy thử:\n- Giữ nút LÂU hơn (3-5 giây)\n- Nói ngay sau 1 giây\n- Nói TO và RÕ RÀNG hơn');
+      }
+    }, 2000);
   };
 
   const processUserInput = async (userText) => {
@@ -437,8 +475,15 @@ Remember: Response MUST be 100% Korean language only!`
             {messages.length === 0 && (
               <div className="welcome-message">
                 <h2>환영합니다! Chào mừng bạn đến với ứng dụng học tiếng Hàn</h2>
-                <p><strong>🎤 Nhấn giữ nút → Nói TO và RÕ bằng tiếng Hàn → Thả nút</strong></p>
-                <p style={{fontSize: '14px', color: '#666'}}>Lưu ý: Nói trong môi trường yên tĩnh, phát âm rõ ràng</p>
+                <p><strong>🎤 Cách sử dụng:</strong></p>
+                <ol style={{textAlign: 'left', maxWidth: '400px', margin: '10px auto'}}>
+                  <li>Nhấn giữ nút đỏ</li>
+                  <li><strong>Đợi 1 giây</strong></li>
+                  <li>Nói <strong>TO và RÕ</strong> bằng tiếng Hàn</li>
+                  <li><strong>Giữ nút</strong> khi đang nói (3-5 giây)</li>
+                  <li>Thả nút sau khi nói xong</li>
+                </ol>
+                <p style={{fontSize: '14px', color: '#666'}}>💡 Thử nói: "안녕하세요" (Xin chào)</p>
               </div>
             )}
             
@@ -548,7 +593,7 @@ Remember: Response MUST be 100% Korean language only!`
               onTouchEnd={handleMouseUp}
               disabled={isProcessing}
             >
-              {isRecording ? '🎤 ĐANG GHI - HÃY NÓI!' : '🎤 Nhấn giữ để nói'}
+              {isRecording ? '🎤 ĐANG GHI - ĐANG NÓI!' : '🎤 Nhấn giữ để nói'}
             </button>
             
             <div className="settings">
