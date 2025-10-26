@@ -149,51 +149,67 @@ const KoreanLearningApp = () => {
         messages: [
           {
             role: 'system',
-            content: `Bạn là trợ lý kiểm tra ngữ pháp tiếng Hàn. Trả lời bằng JSON.
+            content: `Bạn là trợ lý kiểm tra ngữ pháp tiếng Hàn STRICT. Trả lời bằng JSON.
 
-**QUAN TRỌNG: TỰ ĐỘNG TÁCH CÂU**
+**QUAN TRỌNG 1: TỰ ĐỘNG TÁCH CÂU**
 - Nếu người dùng nhập nhiều câu liền nhau (vd: "안녕하세요 잘 지내세요?")
-- Hãy tự động thêm dấu chấm/khoảng trắng ngăn cách: "안녕하세요. 잘 지내세요?"
-- Pattern nhận diện: Khi có 2 động từ/tính từ hoàn chỉnh liền nhau
+- Hãy tự động thêm dấu chấm ngăn cách: "안녕하세요. 잘 지내세요?"
 - Trả về trong trường "corrected" với câu đã tách
+- Đánh dấu "isCorrect": true (vì chỉ tách câu, không sửa lỗi)
 
-**CHỈ 3 THỨ ĐƯỢC PHÉP BỎ (ĐÚNG):**
+**QUAN TRỌNG 2: CHỈ 3 THỨ ĐƯỢC PHÉP BỎ**
 
 1. ✅ BỎ CHỦ NGỮ:
-   - "먹었어요?" = ĐÚNG (không có chủ ngữ)
-   - "밥 먹었어요?" = ĐÚNG (không có chủ ngữ)
+   - "먹었어요?" = ĐÚNG (bỏ 저는/나는)
+   - "밥 먹었어요?" = ĐÚNG (bỏ chủ ngữ)
 
-2. ✅ BỎ TRỢ TỪ (을/를, 이/가, 에, 한테, v.v.):
-   - "밥 먹었어요?" = ĐÚNG (bỏ trợ từ 을)
-   - "학교 갔어요" = ĐÚNG (bỏ trợ từ 에)
+2. ✅ BỎ TRỢ TỪ (을/를, 이/가, 에, 한테, 에서...):
+   - "밥 먹었어요?" = ĐÚNG (bỏ 을)
+   - "학교 갔어요" = ĐÚNG (bỏ 에)
+   - "친구 만났어" = ĐÚNG (bỏ 를)
 
-3. ✅ BỎ 요:
+3. ✅ BỎ ĐuÔI 요:
    - "먹었어" = ĐÚNG (bỏ 요)
    - "밥 먹었어" = ĐÚNG (bỏ 요)
+   - "좋아" = ĐÚNG (bỏ 요)
 
-**TẤT CẢ KHÁC = SAI:**
+**QUAN TRỌNG 3: TẤT CẢ KHÁC = SAI**
 
-❌ KHÔNG ĐƯỢC bỏ đuôi động từ (trừ 요):
-   - "밥 먹" = SAI (thiếu 었어)
-   - "먹" = SAI (động từ chưa hoàn chỉnh)
-   - "가" = SAI (động từ chưa hoàn chỉnh)
+❌ KHÔNG ĐƯỢC BỎ ĐUÔI ĐỘNG TỪ (trừ 요):
+   - "밥 먹" = SAI ❌ (thiếu 었어/어/어요)
+   - "학교 가" = SAI ❌ (thiếu 았어/아/아요)
+   - "좋" = SAI ❌ (thiếu 아/아요/았어)
 
-❌ Phải có gốc động từ + thì:
-   - CẦN: 먹다 → 먹어, 먹었어, 먹었어요 ✅
+❌ Động từ PHẢI có đuôi thì:
+   - CẦN: 먹다 → 먹어, 먹었어, 먹었어요, 먹는다 ✅
    - SAI: chỉ có 먹 ❌
 
 ❌ Lỗi phát âm:
-   - "밤 먹었어요" = SAI (phải là 밥 chứ không phải 밤)
+   - "밤 먹었어요" = SAI (밤≠밥)
 
 ❌ Không có vị ngữ:
    - Chỉ có "밥" = SAI
    - Chỉ có "저는" = SAI
 
 **VÍ DỤ ĐÚNG:**
-✅ "밥 먹었어요?" (bỏ chủ ngữ + 을)
-✅ "밥 먹었어" (bỏ chủ ngữ + 을 + 요)
-✅ "먹었어요" (bỏ chủ ngữ)
-✅ "먹었어" (bỏ chủ ngữ + 요)
+✅ "밥 먹었어요?" 
+✅ "밥 먹었어" 
+✅ "밥 먹어"
+✅ "먹었어요"
+✅ "먹었어"
+✅ "먹어"
+✅ "학교 갔어"
+✅ "좋아요"
+✅ "좋아"
+
+**VÍ DỤ SAI:**
+❌ "밥 먹" (thiếu đuôi động từ)
+❌ "학교 가" (thiếu đuôi)
+❌ "먹" (thiếu đuôi)
+❌ "가" (thiếu đuôi)
+❌ "좋" (thiếu đuôi)
+❌ "밤 먹었어요" (lỗi phát âm)
+❌ "밥" (không có động từ)
 
 **VÍ DỤ TỰ ĐỘNG TÁCH CÂU:**
 
@@ -203,58 +219,36 @@ Output: {"isCorrect": true, "corrected": "안녕하세요. 잘 지내세요?", "
 Input: "밥 먹었어 학교 갔어"
 Output: {"isCorrect": true, "corrected": "밥 먹었어. 학교 갔어.", "errorType": "none"}
 
-Input: "안녕하세요 반갑습니다"
-Output: {"isCorrect": true, "corrected": "안녕하세요. 반갑습니다.", "errorType": "none"}
-
-Input: "좋아요 감사합니다"
-Output: {"isCorrect": true, "corrected": "좋아요. 감사합니다.", "errorType": "none"}
-
-**VÍ DỤ SAI:**
-❌ "밥 먹" (thiếu 었어)
-❌ "먹" (chưa hoàn chỉnh)
-❌ "가" (chưa hoàn chỉnh)
-❌ "밤 먹었어요" (lỗi phát âm)
-
-**JSON:**
-{
-  "isCorrect": true/false,
-  "corrected": "text (đã tách câu nếu cần)",
-  "errorType": "incomplete|pronunciation|grammar|none",
-  "explanation": "Tiếng Việt (nếu sai)"
-}
-
-**ĐỊNH DẠNG GIẢI THÍCH (nếu sai):**
-🔍 Phân tích lỗi:
-- Câu của bạn: "[câu gốc]"
-- Vấn đề: [mô tả vấn đề bằng tiếng Việt]
-
-❌ Tại sao sai:
-[Giải thích chi tiết bằng tiếng Việt]
-
-✅ Cách sửa:
-- Câu đúng: "[câu đã sửa]"
-- Giải thích: [cách sửa bằng tiếng Việt]
-
-📝 Ví dụ:
-1) [ví dụ 1 với dịch tiếng Việt]
-2) [ví dụ 2 với dịch tiếng Việt]
-3) [ví dụ 3 với dịch tiếng Việt]
-
-**VÍ DỤ CỤ THỂ CHO "밥 먹":**
+**VÍ DỤ LỖI THẬT:**
 
 Input: "밥 먹"
-Output: {"isCorrect": false, "corrected": "밥 먹었어", "errorType": "incomplete", "explanation": "🔍 Phân tích lỗi:\\n- Câu của bạn: '밥 먹'\\n- Vấn đề: Câu thiếu đuôi động từ, không có dấu hiệu thì (quá khứ/hiện tại)\\n\\n❌ Tại sao sai:\\nĐộng từ '먹다' (ăn) cần có đuôi để biểu thị thì. Chỉ có '먹' là chưa đủ, phải có thêm '어', '었어', hoặc '었어요' để chỉ thì.\\n\\n✅ Cách sửa:\\n- Câu đúng: '밥 먹었어'\\n- Giải thích: Thêm '었어' để chỉ thì quá khứ (đã ăn cơm)\\n\\n📝 Ví dụ:\\n1) 밥 먹었어요? (Bạn đã ăn cơm chưa? - lịch sự)\\n2) 밥 먹었어 (Ăn cơm rồi - thân mật)\\n3) 학교 갔어요 (Đã đi học rồi)"}
+Output: {"isCorrect": false, "corrected": "밥 먹었어", "errorType": "incomplete", "explanation": "🔍 Phân tích lỗi:\\n- Câu của bạn: '밥 먹'\\n- Vấn đề: Thiếu đuôi động từ, chỉ có gốc '먹'\\n\\n❌ Tại sao sai:\\nĐộng từ '먹다' (ăn) phải có đuôi thể hiện thì. Chỉ được bỏ chủ ngữ, trợ từ, và đuôi '요'. KHÔNG được bỏ đuôi động từ như '었어', '어', '어요'.\\n\\n✅ Cách sửa:\\n- Câu đúng: '밥 먹었어'\\n- Giải thích: Thêm '었어' để hoàn chỉnh động từ\\n\\n📝 Ví dụ:\\n1) 밥 먹었어요? (Đã ăn cơm chưa? - lịch sự)\\n2) 밥 먹었어 (Ăn rồi - thân mật)\\n3) 밥 먹어 (Ăn đi - mệnh lệnh)"}
 
-QUAN TRỌNG: 
-1. TỰ ĐỘNG TÁCH CÂU khi có nhiều câu liền nhau
-2. TRẢ LỜI TOÀN BỘ BẰNG TIẾNG VIỆT. KHÔNG DÙNG TIẾNG ANH.`
+Input: "학교 가"
+Output: {"isCorrect": false, "corrected": "학교 갔어", "errorType": "incomplete", "explanation": "🔍 Phân tích lỗi:\\n- Câu của bạn: '학교 가'\\n- Vấn đề: Thiếu đuôi động từ\\n\\n❌ Tại sao sai:\\nChỉ có gốc '가' chưa đủ, cần thêm đuôi như '아', '았어', '았어요'.\\n\\n✅ Cách sửa:\\n- Câu đúng: '학교 갔어'\\n\\n📝 Ví dụ:\\n1) 학교 갔어요 (Đã đi học - lịch sự)\\n2) 학교 갔어 (Đi học rồi - thân mật)\\n3) 학교 가요 (Đi học - hiện tại)"}
+
+**JSON FORMAT:**
+{
+  "isCorrect": true/false,
+  "corrected": "text (đã tách câu nếu cần / đã sửa nếu sai)",
+  "errorType": "incomplete|pronunciation|grammar|none",
+  "explanation": "Tiếng Việt chi tiết (CHỈ khi có lỗi thật)"
+}
+
+**QUY TẮC CUỐI CÙNG:**
+- Tự động tách câu → isCorrect: true
+- Thiếu đuôi động từ → isCorrect: false, errorType: "incomplete"
+- Lỗi phát âm → isCorrect: false, errorType: "pronunciation"
+
+TRẢ LỜI TOÀN BỘ BẰNG TIẾNG VIỆT.`
           },
           {
             role: 'user',
-            content: `Ngữ cảnh: ${recent}\n\nCâu cần kiểm tra: "${original}"\n\nLƯU Ý: 
-1. Tự động tách câu nếu có nhiều câu liền nhau
-2. Chỉ được bỏ: chủ ngữ, trợ từ, 요
-3. Động từ PHẢI hoàn chỉnh có thì`
+            content: `Ngữ cảnh: ${recent}\n\nCâu cần kiểm tra: "${original}"\n\nQUY TẮC STRICT:
+1. Tự động tách câu nếu nhiều câu
+2. CHỈ được bỏ: chủ ngữ, trợ từ (을/를/이/가/에), đuôi 요
+3. KHÔNG được bỏ đuôi động từ: 었어/어/아/는다/ㄴ다
+4. Động từ PHẢI hoàn chỉnh`
           }
         ],
         temperature: 0.1,
@@ -468,7 +462,6 @@ CRITICAL: Grammar MUST have 2+ items. Extract ONLY from YOUR response.`
           <div key={msg.id} style={{marginBottom: '15px', width: '100%', display: 'flex', justifyContent: msg.type === 'user' ? 'flex-end' : 'flex-start'}}>
             {msg.type === 'user' ? (
               <div style={{background: msg.isCorrect ? '#e3f2fd' : '#ffebee', padding: '15px', borderRadius: '15px', display: 'inline-block', maxWidth: '85%'}}>
-                {/* CHỈ HIỆN GẠCH NGANG KHI CÓ LỖI THẬT (không phải tự động tách câu) */}
                 {msg.originalText && !msg.isCorrect && (
                   <div style={{textDecoration: 'line-through', color: '#f44336', marginBottom: '8px', fontSize: '15px'}}>{msg.originalText}</div>
                 )}
