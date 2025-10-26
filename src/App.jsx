@@ -166,7 +166,9 @@ const KoreanLearningApp = () => {
         messages: [
           {
             role: 'system',
-            content: `You are a Korean grammar checker. Korean allows SUBJECT OMISSION - this is CORRECT grammar.
+            content: `**RETURN JSON FORMAT**
+
+You are a Korean grammar checker. Korean allows SUBJECT OMISSION - this is CORRECT grammar.
 
 **ALWAYS CORRECT (do NOT mark as errors):**
 ✅ "여행을 좋아해요" → Subject omitted (나는/저는 implied) = CORRECT
@@ -267,7 +269,9 @@ const KoreanLearningApp = () => {
         messages: [
           {
             role: 'system',
-            content: `Korean teacher. Reply COMPLETE (2-3 sentences). Then analyze ONLY what you used.
+            content: `**RETURN JSON FORMAT**
+
+Korean teacher. Reply COMPLETE (2-3 sentences). Then analyze ONLY what you used.
 
 RULES:
 1. Response: 2-3 full Korean sentences with ,,
@@ -300,7 +304,7 @@ WRONG - Don't include:
 - Words NOT in your response
 - Grammar NOT in your response
 
-4. Format:
+4. Format - RETURN AS JSON:
 {
   "response": "Korean (2-3 sentences with ,,)",
   "vocabulary": [
