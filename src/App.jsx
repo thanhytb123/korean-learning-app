@@ -90,17 +90,41 @@ const KoreanLearningApp = () => {
       mediaRecorderRef.current.start();
       
       if (recognitionRef.current) {
+        // Gán event handlers TRƯỚC KHI start
+        recognitionRef.current.onresult = async (event) => {
+          const transcript = event.results[0][0].transcript;
+          console.log('Speech recognized:', transcript);
+          
+          if (transcript && transcript.trim().length > 0) {
+            await processUserInput(transcript);
+          }
+        };
+        
+        recognitionRef.current.onerror = (event) => {
+          console.error('Speech recognition error:', event.error);
+          if (event.error !== 'no-speech') {
+            alert(`Lỗi nhận diện: ${event.error}`);
+          }
+        };
+        
+        recognitionRef.current.onend = () => {
+          console.log('Speech recognition ended');
+        };
+        
         recognitionRef.current.start();
+        console.log('Speech recognition started');
       }
     } catch (error) {
       console.error('Error starting recording:', error);
       setIsRecording(false);
+      alert(`Lỗi khởi động: ${error.message}`);
     }
   };
 
   const handleMouseUp = () => {
     if (!isRecording) return;
     
+    console.log('Stopping recording...');
     setIsRecording(false);
     
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
@@ -116,28 +140,14 @@ const KoreanLearningApp = () => {
         }
       };
     }
-    
-    if (recognitionRef.current) {
-      recognitionRef.current.onresult = async (event) => {
-        const transcript = event.results[0][0].transcript;
-        
-        if (transcript && transcript.trim().length > 0) {
-          await processUserInput(transcript);
-        }
-      };
-      
-      recognitionRef.current.onerror = (event) => {
-        if (event.error !== 'no-speech') {
-          console.error('Speech recognition error:', event.error);
-        }
-      };
-    }
   };
 
   const processUserInput = async (userText) => {
     setIsProcessing(true);
     
     try {
+      console.log('Processing input:', userText);
+      
       const correctionResponse = await callOpenAI('/v1/chat/completions', {
         model: 'gpt-4o-mini',
         messages: [
@@ -229,7 +239,7 @@ const KoreanLearningApp = () => {
       
     } catch (error) {
       console.error('Error processing:', error);
-      alert('Lỗi xử lý, vui lòng thử lại');
+      alert(`Lỗi xử lý: ${error.message}`);
     } finally {
       setIsProcessing(false);
     }
