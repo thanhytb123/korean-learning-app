@@ -161,25 +161,6 @@ const KoreanLearningApp = () => {
     return false;
   };
 
-  const filterVocabGrammar = (responseText, vocab = [], grammar = []) => {
-    const text = (responseText || '').replace(/[,\.\?!]/g, ' ');
-    const presentWords = new Set(text.split(/\s+/).filter(Boolean));
-
-    const filteredVocab = (vocab || []).filter(v => {
-      const word = typeof v === 'string' ? v : v.word;
-      if (!word) return false;
-      return Array.from(presentWords).some(w => w.includes(word) || word.includes(w) || w === word);
-    }).map(v => v);
-
-    const filteredGrammar = (grammar || []).filter(g => {
-      const pattern = typeof g === 'string' ? g : g.pattern;
-      if (!pattern) return false;
-      return responseText.includes(pattern) || responseText.includes(pattern.replace(/\s+/g, ''));
-    }).map(g => g);
-
-    return { filteredVocab, filteredGrammar };
-  };
-
   const processUserInput = async (userText) => {
     setIsProcessing(true);
     try {
@@ -276,40 +257,31 @@ Format for explanation (if error):
         messages: [
           {
             role: 'system',
-            content: `You are a detailed Korean teacher. Reply in JSON EXACTLY with these keys:
+            content: `Korean teacher. MUST return JSON with grammar patterns.
 
-**RESPONSE**: 2-3 natural Korean sentences with ",," for pauses. DON'T repeat user's words.
+RESPONSE: 2-3 Korean sentences with ,,
+VOCABULARY: 3-5 words from YOUR response
+GRAMMAR: **MINIMUM 2 patterns REQUIRED**
 
-**VOCABULARY**: Array of 3-5 words YOU USE in your response:
-- word: Korean word
-- meaning: Nghĩa tiếng Việt
-- pronunciation: Romanization 
-- example: "Korean sentence (Nghĩa tiếng Việt)"
+Identify ALL patterns YOU use:
+- Verb endings: -고 있어요, -았/었어요, -네요, -는데, -지만, -겠어요
+- Particles: 을/를, 이/가, 에서, 에게, 한테
+- Example: "잘 지냈어요, 만나서 반가워요" → Grammar: ["-았/었어요", "-아/어서"]
 
-**GRAMMAR**: Array of 2-4 grammar patterns YOU USE in your response:
-- pattern: Exact pattern like "-고 있어요", "-았/었어요", "-네요", "-는데"
-- explanation: "Chức năng: Detailed Vietnamese explanation of what this grammar does"
-- usage: "Khi nào dùng: Vietnamese explanation of when to use"
-- examples: Array of 3 examples: ["Korean example 1 (Nghĩa Việt)", "Korean example 2 (Nghĩa Việt)", "Korean example 3 (Nghĩa Việt)"]
-
-CRITICAL RULES:
-1. ONLY include words/grammar that APPEAR in YOUR Korean response
-2. For grammar, identify specific patterns like -고 있어요, -았어요, -는데, -네요, particles like 을/를, 이/가
-3. ALL explanations must be in Vietnamese with examples
-4. If you write "우리는 잘 지내고 있어요" → grammar must include "-고 있어요"
-5. Return ONLY valid JSON
-
-JSON format:
+JSON (MANDATORY):
 {
-  "response": "Korean sentences with ,,",
-  "vocabulary": [{word, meaning, pronunciation, example}, ...],
-  "grammar": [{pattern, explanation, usage, examples: [...]}, ...]
-}`
+  "response": "Korean with ,,",
+  "vocabulary": [{"word":"word", "meaning":"Việt", "pronunciation":"roman", "example":"Korean (Việt)"}],
+  "grammar": [{"pattern":"EXACT pattern", "explanation":"Chức năng: Việt explanation", "usage":"Khi dùng: Việt", "examples":["Ex1 Korean (Việt)","Ex2 Korean (Việt)","Ex3 Korean (Việt)"]}]
+}
+
+CRITICAL: Grammar array MUST have at least 2 items. Extract ONLY from YOUR response.`
           },
           ...messagesRef.current.slice(-6).map(m => ({ role: m.type === 'user' ? 'user' : 'assistant', content: m.type === 'user' ? m.correctedText : m.text })),
           { role: 'user', content: userMsg.correctedText }
         ],
         temperature: 0.7,
+        max_tokens: 1200,
         response_format: { type: 'json_object' }
       };
 
@@ -332,7 +304,9 @@ JSON format:
         aiResult = { response: fallback, vocabulary: [], grammar: [] };
       }
 
-      const { filteredVocab, filteredGrammar } = filterVocabGrammar(aiResult.response || '', aiResult.vocabulary || [], aiResult.grammar || []);
+      // KHÔNG filter để debug - hiện tất cả
+      const filteredVocab = aiResult.vocabulary || [];
+      const filteredGrammar = aiResult.grammar || [];
 
       const aiMsg = {
         id: Date.now() + 1,
