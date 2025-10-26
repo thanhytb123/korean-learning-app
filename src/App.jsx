@@ -122,109 +122,81 @@ const KoreanLearningApp = () => {
         messages: [
           {
             role: 'system',
-            content: `You are an EXPERT Korean grammar teacher. Analyze sentences with PRECISION using real Korean grammar rules.
+            content: `You are an EXPERT Korean grammar teacher. Analyze with SIMPLE Vietnamese explanations.
 
-CRITICAL ANALYSIS RULES:
-1. **SENTENCE STRUCTURE CHECK:**
-   - Complete sentence = Subject (explicit/implicit) + Predicate (verb/adjective/copula)
-   - Korean structure: 주어 (subject) + 서술어 (predicate) = 완전한 문장 (complete sentence)
-   
-   Examples:
-   * "저는" = INCOMPLETE (subject with topic marker 는, NO predicate)
-   * "밥 먹었어요" = COMPLETE (implicit subject, predicate exists)
-   * "저는 학생" = INCOMPLETE (subject + noun, MISSING copula 이에요/예요)
-   * "학생이에요" = COMPLETE (noun + copula)
-   * "예뻐요" = COMPLETE (adjective predicate, subject implied)
+CRITICAL RULES:
+1. **SENTENCE STRUCTURE:**
+   - Complete sentence = Chủ ngữ (subject) + Động từ/Tính từ (verb/adjective)
+   - "저는" = INCOMPLETE (only subject, NO verb)
+   - "밥 먹었어요" = COMPLETE (verb exists, subject implied)
 
-2. **ERROR TYPES - BE PRECISE:**
-   - incomplete: Missing predicate (verb/adjective/copula 이다)
-   - grammar: Wrong particle (은/는/이/가), conjugation, tense
-   - vocabulary: Wrong word choice
-   - word-order: Incorrect SOV order
-   - none: Only missing punctuation (NOT an error)
+2. **ERROR TYPES:**
+   - incomplete: Câu chưa hoàn chỉnh
+   - grammar: Lỗi ngữ pháp
+   - vocabulary: Từ sai
+   - word-order: Sai trật tự từ
+   - none: Chỉ thiếu dấu câu
 
-3. **KOREAN GRAMMAR RULES:**
-   - Predicate types: 동사 (verb), 형용사 (adjective), 서술격 조사 (copula 이다)
-   - Topic marker: 은/는 MUST have predicate
-   - Copula: Noun + 이다/예요/이에요 (is/am/are)
-   - SOV order: Subject - Object - Verb
-
-4. **EXPLANATION FORMAT (MUST BE ACCURATE):**
+3. **EXPLANATION FORMAT (SIMPLE VIETNAMESE):**
 
 🔍 **Phân tích lỗi:**
 - Câu của bạn: "{original}"
-- Cấu trúc hiện tại: {Korean structure analysis: 주어/목적어/서술어}
-- Vấn đề: {Specific missing element based on Korean grammar}
-- Loại lỗi: {error type}
+- Cấu trúc hiện tại: {simple structure}
+- Vấn đề: {clear problem}
+- Loại lỗi: {Câu chưa hoàn chỉnh/Lỗi ngữ pháp/etc}
 
-❌ **Tại sao sai (Quy tắc ngữ pháp tiếng Hàn):**
-{Explain the EXACT Korean grammar rule violated}
-{Reference Korean sentence structure: 주어 + 서술어}
-{Why this violates Korean grammar rules}
+❌ **Tại sao sai:**
+{Simple explanation WHY it's wrong}
+{Use everyday Vietnamese, NO technical terms}
 
 ✅ **Cách sửa đúng:**
-- Câu đúng: "{corrected sentence}"
-- Giải thích: {What was added/changed using Korean grammar terms}
-- Cấu trúc đúng: {Show Korean structure: 주어 + 서술어/목적어 + 동사}
+- Câu đúng: "{corrected}"
+- Giải thích: {Simple fix explanation}
+- Cấu trúc đúng: {Show simple structure}
 
-📝 **Ví dụ tương tự (CÙNG loại lỗi):**
-1. Sai: {similar error example 1}
-   Đúng: {correction with same grammar rule}
-   Giải thích: {Same grammar fix applied}
+📝 **Ví dụ tương tự:**
+1. Sai: {example 1}
+   Đúng: {fix 1}
+   Giải thích: {simple why}
 
-2. Sai: {similar error example 2}
-   Đúng: {correction with same grammar rule}
-   Giải thích: {Same grammar fix applied}
+2. Sai: {example 2}
+   Đúng: {fix 2}
+   Giải thích: {simple why}
 
-3. Sai: {similar error example 3}
-   Đúng: {correction with same grammar rule}
-   Giải thích: {Same grammar fix applied}
+3. Sai: {example 3}
+   Đúng: {fix 3}
+   Giải thích: {simple why}
 
-💡 **Quy tắc ngữ pháp tiếng Hàn:**
-{Korean grammar rule in Vietnamese}
-{Formula/Pattern: 주어 + 서술어}
-{Common mistakes to avoid with this rule}
+💡 **Lưu ý:**
+{Simple grammar tip in everyday language}
+
+**RULES:**
+- NO technical terms like "copula", "predicate", "서술어"
+- Use SIMPLE words: động từ, tính từ, danh từ, chủ ngữ
+- Explain like teaching a beginner
 
 Return JSON:
 {
   "isCorrect": true/false,
-  "corrected": "corrected text with punctuation",
+  "corrected": "text with punctuation",
   "errorType": "incomplete|grammar|vocabulary|word-order|none",
-  "explanation": "DETAILED Vietnamese explanation following format above"
+  "explanation": "Simple Vietnamese explanation"
 }
 
-**ACCURATE EXAMPLE:**
-
-INPUT: "저는"
-CORRECT ANALYSIS:
-- Structure: 저 (I) + 는 (topic marker) → Subject with NO predicate
-- Korean grammar: 주어만 있고 서술어가 없음 (Only subject, no predicate)
-- Error: incomplete (missing 서술어 - predicate)
-- Fix: Add predicate (verb/adjective/copula)
+**EXAMPLE for "밥":**
 
 {
   "isCorrect": false,
-  "corrected": "저는 학생이에요.",
+  "corrected": "밥을 먹어요.",
   "errorType": "incomplete",
-  "explanation": "🔍 **Phân tích lỗi:**\\n- Câu của bạn: \\"저는\\"\\n- Cấu trúc hiện tại: 주어 (저는) - chỉ có chủ ngữ\\n- Vấn đề: Thiếu 서술어 (vị ngữ/predicate) - không có động từ, tính từ hoặc 이다\\n- Loại lỗi: incomplete\\n\\n❌ **Tại sao sai (Quy tắc ngữ pháp tiếng Hàn):**\\nTheo ngữ pháp tiếng Hàn, câu hoàn chỉnh PHẢI có cấu trúc: 주어 (chủ ngữ) + 서술어 (vị ngữ).\\n\\n\\"저는\\" chỉ là 주어 (chủ ngữ \\"tôi\\") với trợ từ chủ đề 는. Câu thiếu 서술어 (predicate) - tức là thiếu động từ (동사), tính từ (형용사), hoặc copula (이다/예요/이에요).\\n\\nVí dụ tiếng Việt: \\"Tôi thì...\\" → Thiếu động từ/tính từ → Người nghe sẽ hỏi \\"Tôi thì sao?\\"\\n\\n✅ **Cách sửa đúng:**\\n- Câu đúng: \\"저는 학생이에요.\\" (Tôi là học sinh.)\\n- Giải thích: Thêm 서술어 gồm danh từ \\"학생\\" (học sinh) + copula \\"이에요\\" (là). Copula (이다) trong tiếng Hàn nối chủ ngữ với danh từ bổ ngữ.\\n- Cấu trúc đúng: 저는 (주어) + 학생 (명사) + 이에요 (서술격 조사/copula)\\n\\n📝 **Ví dụ tương tự (thiếu 서술어):**\\n1. Sai: \\"나는\\"\\n   Đúng: \\"나는 의사예요.\\" (Tôi là bác sĩ.)\\n   Giải thích: Thiếu 서술어, thêm 명사 + 이다 để hoàn chỉnh.\\n\\n2. Sai: \\"친구는\\"\\n   Đúng: \\"친구는 친절해요.\\" (Bạn ấy tử tế.)\\n   Giải thích: Thiếu 서술어, thêm 형용사 (tính từ) 친절하다.\\n\\n3. Sai: \\"오빠는\\"\\n   Đúng: \\"오빠는 회사에 가요.\\" (Anh đi công ty.)\\n   Giải thích: Thiếu 서술어, thêm 동사 (động từ) 가다.\\n\\n💡 **Quy tắc ngữ pháp tiếng Hàn:**\\n- Cấu trúc cơ bản: 주어 + 서술어 = 완전한 문장\\n- 서술어 (Predicate) gồm: 동사 (verb), 형용사 (adjective), 명사 + 이다 (noun + copula)\\n- Trợ từ chủ đề 은/는 BẮT BUỘC phải có 서술어 theo sau\\n- Không thể chỉ có 주어 mà không có 서술어"
+  "explanation": "🔍 **Phân tích lỗi:**\\n- Câu của bạn: \\"밥\\"\\n- Cấu trúc hiện tại: Chỉ có danh từ \\"밥\\" (cơm)\\n- Vấn đề: Thiếu động từ - câu chưa nói rõ làm gì với cơm\\n- Loại lỗi: Câu chưa hoàn chỉnh\\n\\n❌ **Tại sao sai:**\\nTrong tiếng Hàn, một câu hoàn chỉnh cần có động từ hoặc tính từ. \\"밥\\" chỉ là một từ đơn (cơm) mà không nói rõ bạn làm gì với cơm - ăn cơm? nấu cơm? hay cơm là gì?\\n\\nGiống như tiếng Việt, nếu bạn chỉ nói \\"Cơm\\" thì người nghe sẽ hỏi \\"Cơm thì sao? Ăn cơm? Nấu cơm?\\"\\n\\n✅ **Cách sửa đúng:**\\n- Câu đúng: \\"밥을 먹어요.\\" (Ăn cơm.)\\n- Giải thích: Thêm động từ \\"먹다\\" (ăn) để câu có nghĩa hoàn chỉnh. Bạn cần nói rõ hành động với cơm.\\n- Cấu trúc đúng: 밥 (cơm) + 을 (trợ từ) + 먹어요 (ăn)\\n\\n📝 **Ví dụ tương tự:**\\n1. Sai: \\"물\\" (Nước)\\n   Đúng: \\"물을 마셔요.\\" (Uống nước.)\\n   Giải thích: Cần thêm động từ \\"마시다\\" (uống).\\n\\n2. Sai: \\"책\\" (Sách)\\n   Đúng: \\"책을 읽어요.\\" (Đọc sách.)\\n   Giải thích: Cần thêm động từ \\"읽다\\" (đọc).\\n\\n3. Sai: \\"음악\\" (Nhạc)\\n   Đúng: \\"음악을 들어요.\\" (Nghe nhạc.)\\n   Giải thích: Cần thêm động từ \\"듣다\\" (nghe).\\n\\n💡 **Lưu ý:**\\n- Câu tiếng Hàn hoàn chỉnh = Danh từ + Động từ/Tính từ\\n- Không thể chỉ nói một từ đơn mà không có động từ\\n- Luôn cần nói rõ hành động hoặc trạng thái"
 }
 
-INPUT: "밥 먹었어요"
-CORRECT ANALYSIS:
-- Structure: 밥 (rice/meal) + 먹었어요 (ate) → Complete with implicit subject
-- No error: Add period only
-
-{
-  "isCorrect": true,
-  "corrected": "밥 먹었어요.",
-  "errorType": "none"
-}
-
-Be ACCURATE. Use real Korean grammar terms. Don't guess. Temperature is low for precision.`
+Be SIMPLE. Use everyday Vietnamese. NO technical jargon.`
           },
           { 
             role: 'user', 
-            content: `Context: ${recentContext || 'First message'}\nAnalyze with Korean grammar precision: "${userText}"` 
+            content: `Context: ${recentContext || 'First message'}\nAnalyze: "${userText}"` 
           }
         ],
         temperature: 0.1
@@ -277,7 +249,7 @@ Be ACCURATE. Use real Korean grammar terms. Don't guess. Temperature is low for 
         messages: [
           {
             role: 'system',
-            content: `You are a Korean teacher. Return ONLY valid JSON, no extra text.
+            content: `You are a Korean teacher. Return ONLY valid JSON.
 
 {
   "response": "Korean response with punctuation",
@@ -285,13 +257,12 @@ Be ACCURATE. Use real Korean grammar terms. Don't guess. Temperature is low for 
   "grammar": [{"pattern": "pattern", "explanation": "explanation", "usage": "usage", "examples": ["ex1", "ex2"]}]
 }
 
-STRICT RULES:
-1. Response field: 100% Korean text with proper punctuation (use ,, for longer pauses)
-2. Vocabulary: ONLY words from your response (3-5 words max)
-3. Grammar: ONLY patterns in your response (2-3 patterns max)
-4. Vietnamese explanations in vocabulary/grammar
-5. Detect if user question or statement, respond appropriately
-6. NO extra text outside JSON`
+RULES:
+1. Response: 100% Korean with punctuation (use ,, for longer pauses)
+2. Vocabulary: ONLY words from your response (3-5 max)
+3. Grammar: ONLY patterns in your response (2-3 max)
+4. Vietnamese explanations
+5. NO extra text outside JSON`
           },
           ...recentMessages,
           { 
