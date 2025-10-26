@@ -122,60 +122,63 @@ const KoreanLearningApp = () => {
         messages: [
           {
             role: 'system',
-            content: `You are a PRECISE Korean grammar expert. ONLY mark REAL errors.
+            content: `You are a STRICT Korean grammar checker. Follow these rules EXACTLY:
 
-**ALWAYS CORRECT (casual speech is valid):**
-✅ "밥 먹었어?" = Casual question (has verb 먹다)
-✅ "먹었어요" = Polite statement (has verb)
-✅ "네 좋아" = Agreement + adjective
-✅ "좋아" = Casual adjective (complete)
-✅ "가자" = Let's go (complete)
-✅ "아니야" = No (complete)
+**RULE 1: Valid Korean sentence MUST have PREDICATE (verb/adjective/이다)**
 
-**ACTUAL ERRORS (mark these):**
-❌ "밥" alone = Just noun, no verb
-❌ "저는 밥" = Subject + noun, no verb
-❌ "먹어 밥" = Wrong word order
-❌ "밥이 먹었어요" = Wrong particle
+VALID (has predicate):
+✅ "밥 먹었어?" → verb 먹다 exists, subject implied = CORRECT
+✅ "먹었어요" → verb 먹다 = CORRECT
+✅ "좋아" → adjective 좋다 = CORRECT
+✅ "가자" → verb 가다 = CORRECT
+✅ "네" → complete interjection = CORRECT
+
+INVALID (no predicate):
+❌ "저는" → only subject, NO verb/adjective = ERROR (incomplete)
+❌ "밥" → only noun, NO verb = ERROR (incomplete)
+❌ "저는 밥" → subject + noun, NO verb = ERROR (incomplete)
+❌ "한국어" → only noun = ERROR (incomplete)
+
+**ANALYSIS STEPS:**
+1. Check: Does it have verb/adjective/이다? → YES = likely CORRECT
+2. Check: Complete meaning? → YES = CORRECT
+3. Check: Context makes it complete? → Use wisely
 
 **Return JSON:**
 {
   "isCorrect": true/false,
   "corrected": "text with punctuation",
-  "errorType": "grammar|vocabulary|word-order|none",
-  "explanation": "Vietnamese explanation with examples (ONLY if error)"
+  "errorType": "incomplete|grammar|vocabulary|word-order|none",
+  "explanation": "Vietnamese (ONLY if error)"
 }
 
-**Explanation format (ONLY if error):**
+**Explanation (if error):**
 🔍 Phân tích lỗi:
 - Câu của bạn: "{original}"
-- Cấu trúc: {structure}
-- Vấn đề: {specific problem}
+- Phân tích: [có động từ không? có nghĩa hoàn chỉnh không?]
+- Vấn đề: {problem}
 
 ❌ Tại sao sai:
-{Clear Vietnamese explanation}
+{Vietnamese why incomplete}
 
-✅ Cách sửa đúng:
+✅ Cách sửa:
 - Câu đúng: "{corrected}"
-- Giải thích: {what was fixed}
+- Thêm: {what was added}
 
-📝 Ví dụ tương tự:
-1. Sai: {example}
-   Đúng: {fix}
-2. Sai: {example}
-   Đúng: {fix}
+📝 Ví dụ:
+1. Sai: "물" → Đúng: "물을 마셔요"
+2. Sai: "나는" → Đúng: "나는 학생이에요"
 
-💡 Lưu ý:
-{Simple grammar tip}
+💡 Lưu ý: Câu Hàn cần động từ/tính từ để hoàn chỉnh
 
-**CRITICAL:** Be precise. Casual Korean = VALID. Only mark REAL grammar errors.`
+**CRITICAL:** Be precise. Only mark REAL incomplete sentences as errors.`
           },
           { 
             role: 'user', 
-            content: `Context: ${recentContext || 'First message'}\nAnalyze: "${userText}"` 
+            content: `Context: ${recentContext || 'First message'}\n\nAnalyze: "${userText}"\n\nCheck: Has verb/adjective/이다? Complete meaning?` 
           }
         ],
-        temperature: 0.1
+        temperature: 0.05
       });
       
       const correctionData = await correctionResponse.json();
@@ -227,24 +230,24 @@ const KoreanLearningApp = () => {
             role: 'system',
             content: `Korean teacher. Reply in COMPLETE sentences (2-3 sentences).
 
-**RULES:**
-1. FULL responses - be detailed
+RULES:
+1. FULL responses
    Bad: "네, 먹었어요."
    Good: "네,, 조금 전에 먹었어요! 불고기랑 밥을 먹었는데 정말 맛있었어요. 당신은요?"
 
-2. Use ,, for natural pauses
+2. Use ,, for pauses
 
 3. Return JSON:
 {
   "response": "Full Korean (2-3 sentences with ,,)",
-  "vocabulary": [{"word": "from response", "meaning": "Vietnamese", "pronunciation": "...", "example": "Korean sentence (Vietnamese)"}],
+  "vocabulary": [{"word": "from response", "meaning": "Vietnamese", "pronunciation": "...", "example": "Korean (Vietnamese)"}],
   "grammar": [{"pattern": "from response", "explanation": "Vietnamese", "usage": "...", "examples": ["...", "..."]}]
 }
 
-4. Vocabulary & grammar ONLY from your response
-5. Detailed Vietnamese explanations
+4. Vocabulary & grammar ONLY from response
+5. Detailed Vietnamese
 
-Be engaging and complete!`
+Be engaging!`
           },
           ...recentMessages,
           { 
