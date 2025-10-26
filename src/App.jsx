@@ -161,65 +161,39 @@ const KoreanLearningApp = () => {
         m.type === 'user' ? `User: ${m.correctedText}` : `AI: ${m.text}`
       ).join('\n');
       
+      // TỐI ƯU: Prompt ngắn gọn hơn, chính xác hơn
       const correctionResponse = await callOpenAI('/v1/chat/completions', {
         model: 'gpt-4o-mini',
         messages: [
           {
             role: 'system',
-            content: `**RETURN JSON FORMAT**
+            content: `**RETURN JSON** Smart Korean grammar checker. Context-aware.
 
-You are a Korean grammar checker. Korean allows SUBJECT OMISSION - this is CORRECT grammar.
+RULES:
+✅ CORRECT (subject omission OK):
+- "밥 먹었어?" (Has verb)
+- "먹었어요" (Has verb)
+- "좋아", "가자", "네" (Complete)
 
-**ALWAYS CORRECT (do NOT mark as errors):**
-✅ "여행을 좋아해요" → Subject omitted (나는/저는 implied) = CORRECT
-✅ "밥 먹었어?" → Subject omitted = CORRECT
-✅ "먹었어요" → Subject omitted = CORRECT
-✅ "좋아" → Complete = CORRECT
-✅ "가자" → Complete = CORRECT
-✅ "네" → Complete = CORRECT
+❌ ERROR (incomplete):
+- "저는" (Subject only, no context)
+- "밥" (Noun only, no context)
+- "한국어" (Noun only)
 
-**ONLY mark these as ERRORS:**
-❌ "밥" → Just noun, no predicate
-❌ "저는 밥" → Subject + noun, no predicate
-❌ "한국어" → Just noun, no predicate
-❌ "먹어 밥" → Wrong word order
+CONTEXT-AWARE:
+- If user says "저는" after being asked "누구세요?" → CORRECT (implied 학생이에요)
+- If "저는" alone with no context → ERROR
 
-**RULE:** If sentence has verb/adjective/이다 → CORRECT (even without subject)
-
-**Return JSON:**
-{
-  "isCorrect": true/false,
-  "corrected": "text with punctuation",
-  "errorType": "incomplete|grammar|vocabulary|word-order|none",
-  "explanation": "Vietnamese (ONLY if REAL error)"
-}
-
-**Explanation format (only if error):**
-🔍 Phân tích lỗi:
-- Câu của bạn: "{original}"
-- Vấn đề: {problem}
-
-❌ Tại sao sai:
-{Vietnamese explanation}
-
-✅ Cách sửa:
-- Câu đúng: "{corrected}"
-- Giải thích: {fix}
-
-📝 Ví dụ:
-1-2 examples
-
-💡 Lưu ý:
-{tip}
-
-**CRITICAL:** Subject omission = CORRECT Korean grammar. Only mark real errors.`
+JSON:
+{"isCorrect": true/false, "corrected": "text", "errorType": "none|incomplete|grammar", "explanation": "Việt if error with examples"}`
           },
           { 
             role: 'user', 
-            content: `Context: ${recentContext || 'First message'}\n\nAnalyze: "${userText}"\n\nCheck: Has predicate? Subject omission is OK.` 
+            content: `Context: ${recentContext || 'None'}\nSentence: "${userText}"` 
           }
         ],
-        temperature: 0.05
+        temperature: 0.1,
+        max_tokens: 250
       });
       
       const correctionData = await correctionResponse.json();
@@ -256,84 +230,41 @@ You are a Korean grammar checker. Korean allows SUBJECT OMISSION - this is CORRE
         return;
       }
       
-      const questionPatterns = ['?', 'ㅂ니까', '습니까', 'ㄹ까요', '을까요', '나요', '세요?', '어요?', '아요?', '지요?', '죠?', '니?', '지?', '요?'];
-      const isQuestion = questionPatterns.some(pattern => userMsg.correctedText.includes(pattern));
-      
       const recentMessages = messages.slice(-3).map(m => ({
         role: m.type === 'user' ? 'user' : 'assistant',
         content: m.type === 'user' ? m.correctedText : m.text
       }));
       
+      // TỐI ƯU: Prompt rõ ràng hơn, yêu cầu trả lời tự nhiên
       const aiResponse = await callOpenAI('/v1/chat/completions', {
         model: 'gpt-4o-mini',
         messages: [
           {
             role: 'system',
-            content: `**RETURN JSON FORMAT**
+            content: `**RETURN JSON** Korean teacher. Natural conversation.
 
-Korean teacher. Reply COMPLETE (2-3 sentences). Then analyze ONLY what you used.
+RESPOND RULES:
+- User asks "밥 먹었어요?" → Answer "네,, 조금 전에 먹었어요! 맛있었어요."
+- User says "저는 학생이에요" → Reply "아,, 학생이시구나! 무슨 공부하세요?"
+- DON'T repeat user's words
+- Natural 2-3 sentences with ,,
 
-RULES:
-1. Response: 2-3 full Korean sentences with ,,
-   Example: "네,, 조금 전에 먹었어요! 불고기랑 밥을 먹었는데 정말 맛있었어요."
+ANALYSIS (ONLY what YOU use):
+Vocabulary: Extract 3-5 words FROM your Korean response
+Grammar: Extract 2-4 patterns FROM your Korean response
 
-2. Vocabulary: **ONLY words YOU actually used in YOUR response**
-   - Extract words FROM your response sentence
-   - NO extra words
-   - 3-5 words maximum
-   - Each word MUST appear in your response
-
-3. Grammar: **ONLY grammar structures YOU actually used**
-   - Extract grammar FROM your response
-   - NO extra patterns
-   - Include: particles, endings, connectors you ACTUALLY used
-   
-**EXAMPLE:**
-If you say: "네,, 밥 먹었어요! 맛있었어요."
-
-CORRECT vocabulary:
-- 밥 (bap) - cơm
-- 먹다 (meokda) - ăn
-- 맛있다 (masisseuda) - ngon
-
-CORRECT grammar:
-- -았/었어요: Thì quá khứ lịch sự
-- -는데: Liên từ nối câu (nếu dùng)
-
-WRONG - Don't include:
-- Words NOT in your response
-- Grammar NOT in your response
-
-4. Format - RETURN AS JSON:
+JSON:
 {
-  "response": "Korean (2-3 sentences with ,,)",
+  "response": "Natural Korean (2-3 sentences, ,,)",
   "vocabulary": [
-    {
-      "word": "word from YOUR response",
-      "meaning": "Nghĩa tiếng Việt",
-      "pronunciation": "phát âm",
-      "example": "Ví dụ khác (tiếng Hàn) - Nghĩa tiếng Việt"
-    }
+    {"word": "FROM response", "meaning": "Việt", "pronunciation": "roman", "example": "Korean example (Việt)"}
   ],
   "grammar": [
-    {
-      "pattern": "grammar YOU used (e.g., -았/었어요, -는데)",
-      "explanation": "Chức năng: giải thích chi tiết bằng tiếng Việt",
-      "usage": "Khi nào dùng: giải thích cụ thể",
-      "examples": [
-        "Ví dụ 1: 친구를 만났어요. (Tôi đã gặp bạn.)",
-        "Ví dụ 2: 영화를 봤어요. (Tôi đã xem phim.)",
-        "Ví dụ 3: 한국어를 공부했어요. (Tôi đã học tiếng Hàn.)"
-      ]
-    }
+    {"pattern": "FROM response (like -었어요)", "explanation": "Detailed Việt", "usage": "When to use (Việt)", "examples": ["Ex1 (Việt)", "Ex2 (Việt)", "Ex3 (Việt)"]}
   ]
 }
 
-**CRITICAL:** 
-- Only analyze what YOU wrote
-- Don't add extra words/grammar
-- Be accurate and specific
-- Vietnamese explanations with examples`
+CRITICAL: Only words/grammar YOU actually wrote!`
           },
           ...recentMessages,
           { 
@@ -341,7 +272,8 @@ WRONG - Don't include:
             content: userMsg.correctedText
           }
         ],
-        temperature: 0.7,
+        temperature: 0.9,
+        max_tokens: 1000,
         response_format: { type: "json_object" }
       });
       
