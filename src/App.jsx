@@ -198,41 +198,44 @@ Format explanation as:
         messages: [
           {
             role: 'system',
-            content: `Korean teacher. Auto-detect student level. Return valid JSON:
+            content: `You are a Korean teacher. Return ONLY valid JSON, no extra text.
 
 {
-  "response": "Korean response WITH clear punctuation for TTS pauses",
-  "vocabulary": [{"word": "từ", "meaning": "nghĩa tiếng Việt", "pronunciation": "phát âm", "example": "Câu ví dụ (Nghĩa tiếng Việt)"}],
-  "grammar": [{"pattern": "mẫu ngữ pháp", "explanation": "Giải thích chi tiết tiếng Việt", "usage": "Khi nào dùng, cách dùng", "examples": ["VD1 (nghĩa)", "VD2 (nghĩa)"]}]
+  "response": "Korean response with punctuation",
+  "vocabulary": [{"word": "word", "meaning": "meaning", "pronunciation": "pronunciation", "example": "example"}],
+  "grammar": [{"pattern": "pattern", "explanation": "explanation", "usage": "usage", "examples": ["ex1", "ex2"]}]
 }
 
-CRITICAL RULES:
-1. TTS pauses: Use commas (,) for short, double commas (,,) for longer pauses
-2. **VOCABULARY: Extract ONLY words/phrases FROM your response sentence**
-   - If response: "네,, 맞아요! 저도 밥 먹었어요."
-   - Good vocab: 맞다 (đúng), 저 (tôi), 밥 (cơm), 먹다 (ăn)
-   - Bad: Don't add extra words not in your response
-3. **GRAMMAR: Extract ONLY patterns ACTUALLY USED IN your response**
-   - If response: "네,, 맞아요! 저도 밥 먹었어요."
-   - Good grammar: -아요/어요 (ending), -도 (also), -었- (past)
-   - Bad: Don't add patterns not in your response
-4. Each vocabulary/grammar MUST have:
-   - Detailed Vietnamese explanation
-   - Real examples with meanings
-5. Auto-detect student level from conversation context
+STRICT RULES:
+1. Response field: 100% Korean text with proper punctuation (use ,, for longer pauses)
+2. Vocabulary: ONLY words from your response (3-5 words max)
+3. Grammar: ONLY patterns in your response (2-3 patterns max)
+4. Vietnamese explanations in vocabulary/grammar
+5. Detect if user question or statement, respond appropriately
+6. NO extra text outside JSON
 
-- Response 100% Korean with natural punctuation
-- If QUESTION: Answer clearly
-- If STATEMENT: Continue conversation
-- 3-5 vocab ONLY from response + 2-3 grammar ONLY from response`
+Example:
+User asks: "밥 먹었어요?"
+Good JSON:
+{
+  "response": "네,, 먹었어요! 맛있었어요.",
+  "vocabulary": [
+    {"word": "먹다", "meaning": "ăn", "pronunciation": "mŏkda", "example": "밥 먹었어요 (Đã ăn cơm)"},
+    {"word": "맛있다", "meaning": "ngon", "pronunciation": "masitda", "example": "맛있었어요 (Đã ngon)"}
+  ],
+  "grammar": [
+    {"pattern": "-었어요", "explanation": "Thì quá khứ lịch sự", "usage": "Nói về hành động đã xảy ra", "examples": ["먹었어요 (đã ăn)", "갔어요 (đã đi)"]}
+  ]
+}`
           },
           ...recentMessages,
           { 
             role: 'user', 
-            content: `${userMsg.correctedText} ${isQuestion ? '[QUESTION]' : '[STATEMENT]'}` 
+            content: userMsg.correctedText
           }
         ],
-        temperature: 0.7
+        temperature: 0.7,
+        response_format: { type: "json_object" }
       });
       
       const aiData = await aiResponse.json();
@@ -241,16 +244,34 @@ CRITICAL RULES:
       try {
         let text = aiData.choices[0].message.content;
         text = text.replace(/``````/g, '').trim();
+        
+        // Try to extract JSON if wrapped in extra text
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          text = jsonMatch[0];
+        }
+        
         aiResult = JSON.parse(text);
+        
+        // Validate required fields
+        if (!aiResult.response || typeof aiResult.response !== 'string') {
+          throw new Error('Invalid response structure');
+        }
       } catch (e) {
+        console.error('JSON parse error:', e);
+        const rawText = aiData.choices[0].message.content;
+        // Extract Korean text (remove JSON artifacts)
+        const koreanTextMatch = rawText.match(/[가-힣\s\.,!?]+/g);
+        const cleanedText = koreanTextMatch ? koreanTextMatch.join(' ').trim() : '죄송합니다. 다시 말씀해 주세요.';
+        
         aiResult = {
-          response: aiData.choices[0].message.content,
+          response: cleanedText,
           vocabulary: [],
           grammar: []
         };
       }
       
-      const responseText = aiResult.response || 'Error';
+      const responseText = aiResult.response || '죄송합니다.';
       const aiMsg = {
         id: Date.now() + 1,
         type: 'ai',
@@ -477,11 +498,11 @@ CRITICAL RULES:
                   </button>
                 </div>
                 
-                {expandedDetails[msg.id] && (
+                {expandedDetails[msg.id] && (msg.vocabulary?.length > 0 || msg.grammar?.length > 0) && (
                   <div style={{marginTop: '15px', background: 'white', padding: '15px', borderRadius: '10px'}}>
                     {msg.vocabulary && msg.vocabulary.length > 0 && (
-                      <div style={{marginBottom: '15px'}}>
-                        <h5 style={{color: '#2196f3', margin: '0 0 10px 0', fontSize: '16px'}}>📖 Từ vựng (trong câu trả lời)</h5>
+                      <div style={{marginBottom: msg.grammar?.length > 0 ? '15px' : 0}}>
+                        <h5 style={{color: '#2196f3', margin: '0 0 10px 0', fontSize: '16px'}}>📖 Từ vựng</h5>
                         <div style={{background: '#f0f8ff', padding: '12px', borderRadius: '8px', borderLeft: '3px solid #2196f3'}}>
                           {msg.vocabulary.map((v, i) => (
                             <div key={i} style={{marginBottom: i < msg.vocabulary.length - 1 ? '12px' : 0, paddingBottom: i < msg.vocabulary.length - 1 ? '12px' : 0, borderBottom: i < msg.vocabulary.length - 1 ? '1px solid #e0e0e0' : 'none'}}>
@@ -505,7 +526,7 @@ CRITICAL RULES:
                     
                     {msg.grammar && msg.grammar.length > 0 && (
                       <div>
-                        <h5 style={{color: '#ff9800', margin: '0 0 10px 0', fontSize: '16px'}}>📐 Ngữ pháp (trong câu trả lời)</h5>
+                        <h5 style={{color: '#ff9800', margin: '0 0 10px 0', fontSize: '16px'}}>📐 Ngữ pháp</h5>
                         {msg.grammar.map((g, i) => (
                           <div key={i} style={{background: '#fff8e1', padding: '12px', margin: i > 0 ? '12px 0 0 0' : '0', borderRadius: '8px', borderLeft: '3px solid #ff9800'}}>
                             {typeof g === 'string' ? (
