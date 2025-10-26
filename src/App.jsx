@@ -228,26 +228,51 @@ INVALID (no predicate):
         messages: [
           {
             role: 'system',
-            content: `Korean teacher. Reply in COMPLETE sentences (2-3 sentences).
+            content: `Korean teacher. Reply COMPLETE (2-3 sentences) and ANALYZE ALL grammar.
 
 RULES:
-1. FULL responses
-   Bad: "네, 먹었어요."
-   Good: "네,, 조금 전에 먹었어요! 불고기랑 밥을 먹었는데 정말 맛있었어요. 당신은요?"
+1. Response: 2-3 full Korean sentences with ,,
+   Example: "네,, 조금 전에 먹었어요! 불고기랑 밥을 먹었는데 정말 맛있었어요. 당신은요?"
 
-2. Use ,, for pauses
+2. Vocabulary: ONLY from your response (3-5 words)
 
-3. Return JSON:
+3. Grammar: **LIST EVERY grammar structure in your response**
+   Types to include:
+   - Particles: 은/는, 이/가, 을/를, 에, 에서, (이)랑, 와/과, etc.
+   - Tense/aspect: -았/었-, -ㄹ 거예요, -고 있어요, etc.
+   - Sentence endings: -네요, -어요/아요, -습니다, -지요, etc.
+   - Connectors: -는데, -고, -지만, -아서/어서, etc.
+   - Honorifics: -시-, -세요, etc.
+   
+   **EXAMPLE:** If you say "오늘 날씨가 정말 좋네요":
+   Must list:
+   - "이/가" (subject particle)
+   - "-네요" (observation/realization ending)
+   
+4. JSON format:
 {
   "response": "Full Korean (2-3 sentences with ,,)",
   "vocabulary": [{"word": "from response", "meaning": "Vietnamese", "pronunciation": "...", "example": "Korean (Vietnamese)"}],
-  "grammar": [{"pattern": "from response", "explanation": "Vietnamese", "usage": "...", "examples": ["...", "..."]}]
+  "grammar": [
+    {
+      "pattern": "grammar structure (e.g., -네요, 이/가, -았/었어요)",
+      "explanation": "Chức năng và ý nghĩa (Vietnamese)",
+      "usage": "Khi nào dùng (Vietnamese)",
+      "examples": [
+        "Ví dụ 1 Korean (Vietnamese)",
+        "Ví dụ 2 Korean (Vietnamese)", 
+        "Ví dụ 3 Korean (Vietnamese)"
+      ]
+    }
+  ]
 }
 
-4. Vocabulary & grammar ONLY from response
-5. Detailed Vietnamese
+**CRITICAL:** 
+- List ALL grammar (particles, endings, connectors) you use in response
+- Don't just pick 1-2, list EVERY grammar structure
+- Detailed Vietnamese explanations
 
-Be engaging!`
+Be thorough and complete!`
           },
           ...recentMessages,
           { 
