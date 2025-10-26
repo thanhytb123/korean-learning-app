@@ -151,6 +151,12 @@ const KoreanLearningApp = () => {
             role: 'system',
             content: `Bạn là trợ lý kiểm tra ngữ pháp tiếng Hàn. Trả lời bằng JSON.
 
+**QUAN TRỌNG: TỰ ĐỘNG TÁCH CÂU**
+- Nếu người dùng nhập nhiều câu liền nhau (vd: "안녕하세요 잘 지내세요?")
+- Hãy tự động thêm dấu chấm/khoảng trắng ngăn cách: "안녕하세요. 잘 지내세요?"
+- Pattern nhận diện: Khi có 2 động từ/tính từ hoàn chỉnh liền nhau
+- Trả về trong trường "corrected" với câu đã tách
+
 **CHỈ 3 THỨ ĐƯỢC PHÉP BỎ (ĐÚNG):**
 
 1. ✅ BỎ CHỦ NGỮ:
@@ -189,6 +195,20 @@ const KoreanLearningApp = () => {
 ✅ "먹었어요" (bỏ chủ ngữ)
 ✅ "먹었어" (bỏ chủ ngữ + 요)
 
+**VÍ DỤ TỰ ĐỘNG TÁCH CÂU:**
+
+Input: "안녕하세요 잘 지내세요"
+Output: {"isCorrect": true, "corrected": "안녕하세요. 잘 지내세요?", "errorType": "none"}
+
+Input: "밥 먹었어 학교 갔어"
+Output: {"isCorrect": true, "corrected": "밥 먹었어. 학교 갔어.", "errorType": "none"}
+
+Input: "안녕하세요 반갑습니다"
+Output: {"isCorrect": true, "corrected": "안녕하세요. 반갑습니다.", "errorType": "none"}
+
+Input: "좋아요 감사합니다"
+Output: {"isCorrect": true, "corrected": "좋아요. 감사합니다.", "errorType": "none"}
+
 **VÍ DỤ SAI:**
 ❌ "밥 먹" (thiếu 었어)
 ❌ "먹" (chưa hoàn chỉnh)
@@ -198,7 +218,7 @@ const KoreanLearningApp = () => {
 **JSON:**
 {
   "isCorrect": true/false,
-  "corrected": "text",
+  "corrected": "text (đã tách câu nếu cần)",
   "errorType": "incomplete|pronunciation|grammar|none",
   "explanation": "Tiếng Việt (nếu sai)"
 }
@@ -225,15 +245,20 @@ const KoreanLearningApp = () => {
 Input: "밥 먹"
 Output: {"isCorrect": false, "corrected": "밥 먹었어", "errorType": "incomplete", "explanation": "🔍 Phân tích lỗi:\\n- Câu của bạn: '밥 먹'\\n- Vấn đề: Câu thiếu đuôi động từ, không có dấu hiệu thì (quá khứ/hiện tại)\\n\\n❌ Tại sao sai:\\nĐộng từ '먹다' (ăn) cần có đuôi để biểu thị thì. Chỉ có '먹' là chưa đủ, phải có thêm '어', '었어', hoặc '었어요' để chỉ thì.\\n\\n✅ Cách sửa:\\n- Câu đúng: '밥 먹었어'\\n- Giải thích: Thêm '었어' để chỉ thì quá khứ (đã ăn cơm)\\n\\n📝 Ví dụ:\\n1) 밥 먹었어요? (Bạn đã ăn cơm chưa? - lịch sự)\\n2) 밥 먹었어 (Ăn cơm rồi - thân mật)\\n3) 학교 갔어요 (Đã đi học rồi)"}
 
-QUAN TRỌNG: TRẢ LỜI TOÀN BỘ BẰNG TIẾNG VIỆT. KHÔNG DÙNG TIẾNG ANH.`
+QUAN TRỌNG: 
+1. TỰ ĐỘNG TÁCH CÂU khi có nhiều câu liền nhau
+2. TRẢ LỜI TOÀN BỘ BẰNG TIẾNG VIỆT. KHÔNG DÙNG TIẾNG ANH.`
           },
           {
             role: 'user',
-            content: `Ngữ cảnh: ${recent}\n\nCâu cần kiểm tra: "${original}"\n\nLƯU Ý: Chỉ được bỏ: 1) chủ ngữ, 2) trợ từ, 3) 요. Động từ PHẢI hoàn chỉnh có thì.`
+            content: `Ngữ cảnh: ${recent}\n\nCâu cần kiểm tra: "${original}"\n\nLƯU Ý: 
+1. Tự động tách câu nếu có nhiều câu liền nhau
+2. Chỉ được bỏ: chủ ngữ, trợ từ, 요
+3. Động từ PHẢI hoàn chỉnh có thì`
           }
         ],
         temperature: 0.1,
-        max_tokens: 400
+        max_tokens: 500
       };
 
       let correction = null;
@@ -249,11 +274,12 @@ QUAN TRỌNG: TRẢ LỜI TOÀN BỘ BẰNG TIẾNG VIỆT. KHÔNG DÙNG TIẾNG
       }
 
       const hasRealError = correction.errorType && correction.errorType !== 'none';
+      const wasCorrected = correction.corrected !== original;
 
       const userMsg = {
         id: Date.now(),
         type: 'user',
-        originalText: original,
+        originalText: wasCorrected && !hasRealError ? original : (hasRealError ? original : ''),
         correctedText: correction.corrected || original,
         isCorrect: !hasRealError,
         details: hasRealError ? correction.explanation : ''
@@ -442,8 +468,8 @@ CRITICAL: Grammar MUST have 2+ items. Extract ONLY from YOUR response.`
           <div key={msg.id} style={{marginBottom: '15px', width: '100%', display: 'flex', justifyContent: msg.type === 'user' ? 'flex-end' : 'flex-start'}}>
             {msg.type === 'user' ? (
               <div style={{background: msg.isCorrect ? '#e3f2fd' : '#ffebee', padding: '15px', borderRadius: '15px', display: 'inline-block', maxWidth: '85%'}}>
-                {!msg.isCorrect && (
-                  <div style={{textDecoration: 'line-through', color: '#f44336', marginBottom: '8px', fontSize: '15px'}}>{msg.originalText}</div>
+                {msg.originalText && msg.originalText !== msg.correctedText && (
+                  <div style={{textDecoration: 'line-through', color: '#999', marginBottom: '8px', fontSize: '14px'}}>{msg.originalText}</div>
                 )}
                 <div style={{color: msg.isCorrect ? '#1976d2' : '#e91e63', fontWeight: 'bold', fontSize: '16px', marginBottom: msg.isCorrect ? 0 : '10px'}}>
                   {msg.correctedText}{msg.isCorrect && <span style={{marginLeft: '6px', fontSize: '14px'}}>✓</span>}
