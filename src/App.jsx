@@ -71,11 +71,16 @@ const KoreanLearningApp = () => {
     recognitionRef.current.lang = 'ko-KR';
     recognitionRef.current.continuous = false;
     recognitionRef.current.interimResults = false;
+    recognitionRef.current.maxAlternatives = 1;
     addDebugLog('✅ Speech Recognition initialized');
     
     return () => {
       if (recognitionRef.current) {
-        recognitionRef.current.stop();
+        try {
+          recognitionRef.current.stop();
+        } catch (e) {
+          // Ignore errors on cleanup
+        }
       }
     };
   }, []);
@@ -86,12 +91,19 @@ const KoreanLearningApp = () => {
       return;
     }
     
-    addDebugLog('▶️ Recording started');
+    addDebugLog('▶️ Starting recording...');
     setIsRecording(true);
     audioChunksRef.current = [];
     
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        } 
+      });
+      
       mediaRecorderRef.current = new MediaRecorder(stream);
       
       mediaRecorderRef.current.ondataavailable = (event) => {
@@ -102,10 +114,11 @@ const KoreanLearningApp = () => {
       addDebugLog('🎙️ MediaRecorder started');
       
       if (recognitionRef.current) {
+        // Set up event handlers
         recognitionRef.current.onresult = async (event) => {
           const transcript = event.results[0][0].transcript;
           const confidence = event.results[0][0].confidence;
-          addDebugLog(`🎯 Recognized: "${transcript}" (confidence: ${confidence.toFixed(2)})`);
+          addDebugLog(`🎯 Recognized: "${transcript}" (${(confidence * 100).toFixed(0)}%)`);
           
           if (transcript && transcript.trim().length > 0) {
             await processUserInput(transcript);
@@ -114,7 +127,11 @@ const KoreanLearningApp = () => {
         
         recognitionRef.current.onerror = (event) => {
           addDebugLog(`❌ Speech error: ${event.error}`);
-          if (event.error !== 'no-speech') {
+          if (event.error === 'no-speech') {
+            alert('Không nghe thấy giọng nói. Hãy nói TO và RÕ hơn!');
+          } else if (event.error === 'audio-capture') {
+            alert('Lỗi microphone. Kiểm tra lại quyền truy cập!');
+          } else if (event.error !== 'aborted') {
             alert(`Lỗi nhận diện: ${event.error}`);
           }
         };
@@ -124,18 +141,31 @@ const KoreanLearningApp = () => {
         };
         
         recognitionRef.current.onstart = () => {
-          addDebugLog('🎤 Speech recognition started');
+          addDebugLog('🎤 Speech recognition started - HÃY NÓI NGAY!');
         };
         
         recognitionRef.current.onspeechstart = () => {
-          addDebugLog('🗣️ Speech detected');
+          addDebugLog('🗣️ Speech detected!');
         };
         
         recognitionRef.current.onspeechend = () => {
-          addDebugLog('🔇 Speech ended');
+          addDebugLog('🔇 Speech ended, processing...');
         };
         
-        recognitionRef.current.start();
+        recognitionRef.current.onaudiostart = () => {
+          addDebugLog('🔊 Audio input started');
+        };
+        
+        recognitionRef.current.onaudioend = () => {
+          addDebugLog('🔇 Audio input ended');
+        };
+        
+        try {
+          recognitionRef.current.start();
+          addDebugLog('✅ Recognition started - NÓI TIẾNG HÀN NGAY!');
+        } catch (e) {
+          addDebugLog(`❌ Start error: ${e.message}`);
+        }
       }
     } catch (error) {
       addDebugLog(`❌ Error: ${error.message}`);
@@ -147,7 +177,7 @@ const KoreanLearningApp = () => {
   const handleMouseUp = () => {
     if (!isRecording) return;
     
-    addDebugLog('⏸️ Recording stopped');
+    addDebugLog('⏸️ Stopping recording...');
     setIsRecording(false);
     
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
@@ -157,10 +187,6 @@ const KoreanLearningApp = () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
         addDebugLog(`📦 Audio blob size: ${audioBlob.size} bytes`);
-        
-        if (audioBlob.size < 1000) {
-          addDebugLog('⚠️ Audio too short, no speech detected');
-        }
       };
     }
   };
@@ -175,15 +201,15 @@ const KoreanLearningApp = () => {
         messages: [
           {
             role: 'system',
-            content: `Bạn là giáo viên tiếng Hàn chuyên nghiệp. Nhiệm vụ:
-1. Kiểm tra câu tiếng Hàn của học viên về phát âm, ngữ pháp, từ vựng
-2. Nếu ĐÚNG HOÀN TOÀN: trả về JSON {"isCorrect": true, "corrected": "", "details": ""}
-3. Nếu SAI: trả về JSON {"isCorrect": false, "corrected": "câu đã sửa", "details": "giải thích lỗi và cách sửa bằng tiếng Việt"}
-4. Chỉ trả về JSON, không thêm text khác`
+            content: `You are a Korean language teacher. Task:
+1. Check if the Korean sentence is grammatically correct
+2. If CORRECT: return JSON {"isCorrect": true, "corrected": "", "details": ""}
+3. If INCORRECT: return JSON {"isCorrect": false, "corrected": "corrected sentence", "details": "explanation in Vietnamese"}
+4. Return ONLY JSON, no other text`
           },
           {
             role: 'user',
-            content: `Kiểm tra câu này: "${userText}"`
+            content: `Check this Korean sentence: "${userText}"`
           }
         ],
         temperature: 0.3
@@ -194,7 +220,9 @@ const KoreanLearningApp = () => {
       let correctionResult;
       
       try {
-        correctionResult = JSON.parse(correctionData.choices[0].message.content);
+        const content = correctionData.choices[0].message.content;
+        const cleaned = content.replace(/``````\n?/g, '').trim();
+        correctionResult = JSON.parse(cleaned);
       } catch (e) {
         correctionResult = { isCorrect: true, corrected: userText, details: '' };
       }
@@ -222,10 +250,21 @@ const KoreanLearningApp = () => {
         messages: [
           {
             role: 'system',
-            content: `Bạn là trợ lý học tiếng Hàn thân thiện.
-- Chỉ sử dụng ngữ pháp cấp độ: ${settings.userLevel.join(', ') || 'sơ cấp cơ bản'}
-- LUÔN trả lời bằng CÂU ĐẦY ĐỦ tiếng Hàn
-- Trả về JSON: {"response": "câu trả lời", "vocabulary": [], "grammar": []}`
+            content: `You are a Korean language learning assistant. CRITICAL RULES:
+
+1. You MUST respond ONLY in KOREAN (한국어). NO Vietnamese. NO English.
+2. Use grammar level: ${settings.userLevel.join(', ') || 'beginner (초급)'}
+3. Your response must be a natural, conversational Korean sentence
+4. Return ONLY this JSON format (no markdown, no code blocks):
+
+{"response": "한국어로만 응답", "vocabulary": ["단어: Vietnamese meaning"], "grammar": ["문법: Vietnamese explanation"]}
+
+Example:
+User: "안녕하세요"
+You return:
+{"response": "안녕하세요! 만나서 반가워요. 오늘 기분이 어때요?", "vocabulary": ["만나다: gặp", "반갑다: vui mừng", "기분: tâm trạng"], "grammar": ["-아/어요: thể lịch sự thân mật"]}
+
+Remember: Response MUST be 100% Korean language only!`
           },
           {
             role: 'user',
@@ -240,8 +279,11 @@ const KoreanLearningApp = () => {
       let aiResult;
       
       try {
-        aiResult = JSON.parse(aiData.choices[0].message.content);
+        const responseText = aiData.choices[0].message.content;
+        const cleanedText = responseText.replace(/``````\n?/g, '').trim();
+        aiResult = JSON.parse(cleanedText);
       } catch (e) {
+        addDebugLog(`⚠️ JSON parse error, using fallback`);
         aiResult = {
           response: aiData.choices[0].message.content,
           vocabulary: [],
@@ -345,7 +387,6 @@ const KoreanLearningApp = () => {
     }
   };
 
-  // NÚT TEST - Bypass Speech Recognition
   const testWithText = () => {
     const testText = prompt('Nhập câu tiếng Hàn để test:\n(VD: 안녕하세요)');
     if (testText) {
@@ -387,7 +428,6 @@ const KoreanLearningApp = () => {
       
       {micPermission === 'granted' && (
         <>
-          {/* DEBUG LOG */}
           <div style={{background: '#f0f0f0', padding: '10px', fontSize: '10px', maxHeight: '100px', overflow: 'auto', margin: '10px'}}>
             <strong>Debug Log:</strong>
             {debugLog.map((log, idx) => <div key={idx}>{log}</div>)}
@@ -397,8 +437,8 @@ const KoreanLearningApp = () => {
             {messages.length === 0 && (
               <div className="welcome-message">
                 <h2>환영합니다! Chào mừng bạn đến với ứng dụng học tiếng Hàn</h2>
-                <p>Nhấn giữ nút microphone để bắt đầu nói tiếng Hàn</p>
-                <p>Hoặc click nút "🧪 TEST" để test bằng text</p>
+                <p><strong>🎤 Nhấn giữ nút → Nói TO và RÕ bằng tiếng Hàn → Thả nút</strong></p>
+                <p style={{fontSize: '14px', color: '#666'}}>Lưu ý: Nói trong môi trường yên tĩnh, phát âm rõ ràng</p>
               </div>
             )}
             
@@ -482,23 +522,22 @@ const KoreanLearningApp = () => {
           </div>
           
           <div className="control-panel">
-            {/* NÚT TEST */}
             <button
               onClick={testWithText}
               style={{
                 background: '#2196F3',
                 color: 'white',
-                padding: '15px 30px',
+                padding: '12px 20px',
                 border: 'none',
                 borderRadius: '50px',
-                fontSize: '16px',
+                fontSize: '14px',
                 fontWeight: 'bold',
                 cursor: 'pointer',
                 marginBottom: '10px',
                 width: '100%'
               }}
             >
-              🧪 TEST: Nhập text thay vì nói
+              🧪 TEST: Nhập text (nếu mic không hoạt động)
             </button>
 
             <button
@@ -509,7 +548,7 @@ const KoreanLearningApp = () => {
               onTouchEnd={handleMouseUp}
               disabled={isProcessing}
             >
-              {isRecording ? '🎤 Đang ghi...' : '🎤 Nhấn giữ để nói'}
+              {isRecording ? '🎤 ĐANG GHI - HÃY NÓI!' : '🎤 Nhấn giữ để nói'}
             </button>
             
             <div className="settings">
