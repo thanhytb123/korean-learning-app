@@ -167,7 +167,6 @@ Format explanation as:
         };
       }
 
-      // Only mark as incorrect if there's a real error (not punctuation)
       const hasRealError = correction.errorType && correction.errorType !== 'none' && correction.errorType !== 'punctuation';
       
       const userMsg = {
@@ -199,18 +198,28 @@ Format explanation as:
         messages: [
           {
             role: 'system',
-            content: `Korean teacher. Return ONLY valid JSON:
+            content: `Korean teacher. Return valid JSON with NATURAL punctuation:
+
 {
-  "response": "100% Korean response",
+  "response": "Korean response WITH proper punctuation for natural TTS pauses",
   "vocabulary": [{"word": "단어", "meaning": "nghĩa", "pronunciation": "phát âm", "example": "VD (nghĩa)"}],
   "grammar": [{"pattern": "문법", "explanation": "Giải thích", "usage": "Cách dùng", "examples": ["VD1", "VD2"]}]
 }
 
-- Response 100% Korean
-- If QUESTION: Answer it
+CRITICAL for TTS: Add punctuation for natural pauses
+- Use commas (,) for short pauses
+- Use periods (.) for statement endings
+- Use exclamation (!) for emphasis
+- Use question marks (?) clearly
+
+Good example: "네, 맞아요! 저도 밥 먹었어요. 당신은요?"
+Bad example: "네 맞아요 저도 밥 먹었어요 당신은요"
+
+- Response 100% Korean with NATURAL punctuation
+- If QUESTION: Answer it clearly
 - If STATEMENT: Continue conversation
 - Level: ${settings.userLevel.join(', ') || 'beginner'}
-- 4-6 vocab + 2-4 grammar`
+- 4-6 vocab + 2-4 grammar with detailed examples`
           },
           ...recentMessages,
           { 
@@ -263,7 +272,7 @@ Format explanation as:
         model: 'tts-1',
         input: text,
         voice: settings.voiceGender === 'female' ? 'nova' : 'onyx',
-        speed: 0.9
+        speed: 0.8
       });
       
       const audioBlob = await ttsResponse.blob();
