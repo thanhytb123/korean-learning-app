@@ -122,44 +122,30 @@ const KoreanLearningApp = () => {
         messages: [
           {
             role: 'system',
-            content: `Expert Korean teacher. Grammar check with context awareness.
+            content: `Korean teacher. Check ONLY grammar/vocabulary errors. NEVER mark missing punctuation as error.
 
-CRITICAL RULES:
-1. Multiple sentences without punctuation (e.g., "네 밥 먹었어요") → CORRECT, just add periods
-2. Only mark ERROR if actual grammar/vocabulary mistake
-3. Natural speech omits punctuation - NOT an error
-4. Add punctuation where needed, don't mark as wrong
+RULES:
+1. Always add proper punctuation (periods, commas) to text
+2. Missing punctuation is NOT an error - it's normal in speech
+3. Only mark as error if actual grammar/vocabulary mistake
+4. Return valid JSON only
 
-Return ONLY valid JSON:
 {
   "isCorrect": true/false,
-  "corrected": "sentence with proper punctuation",
-  "details": "DETAILED Vietnamese explanation (if error):
-  
-🔍 Phân tích câu:
-Câu gốc: [original text]
-Câu sửa: [corrected text]
-
-❌ Lỗi phát hiện:
-• Loại lỗi: [grammar/vocabulary/word order]
-• Chi tiết lỗi: [specific mistake]
-• Tại sao sai: [reason with grammar explanation]
-
-✅ Cách sửa đúng:
-• Giải thích: [detailed explanation]
-• Ngữ pháp liên quan: [grammar rules]
-• Ví dụ tương tự:
-  - [Example 1]
-  - [Example 2]
-
-💡 Lưu ý: [usage tips]"
+  "corrected": "text with punctuation added",
+  "errorType": "grammar|vocabulary|word-order|none",
+  "explanation": "Vietnamese explanation (ONLY if real error, not punctuation)"
 }
 
-NO markdown, ONLY JSON.`
+Format explanation as:
+🔍 Lỗi: [error description]
+❌ Tại sao sai: [reason]
+✅ Cách sửa: [correction with examples]
+💡 Lưu ý: [tips]`
           },
           { 
             role: 'user', 
-            content: `Context:\n${recentContext || 'First message'}\n\nAnalyze: "${userText}"` 
+            content: `Context: ${recentContext || 'First message'}\nAnalyze: "${userText}"` 
           }
         ],
         temperature: 0.2
@@ -173,21 +159,29 @@ NO markdown, ONLY JSON.`
         content = content.replace(/``````/g, '').trim();
         correction = JSON.parse(content);
       } catch (e) {
-        correction = { isCorrect: true, corrected: userText, details: '' };
+        correction = { 
+          isCorrect: true, 
+          corrected: userText, 
+          errorType: 'none',
+          explanation: '' 
+        };
       }
+
+      // Only mark as incorrect if there's a real error (not punctuation)
+      const hasRealError = correction.errorType && correction.errorType !== 'none' && correction.errorType !== 'punctuation';
       
       const userMsg = {
         id: Date.now(),
         type: 'user',
         originalText: userText,
         correctedText: correction.corrected || userText,
-        isCorrect: correction.isCorrect !== false,
-        details: correction.details || ''
+        isCorrect: !hasRealError,
+        details: hasRealError ? correction.explanation : ''
       };
       
       setMessages(prev => [...prev, userMsg]);
       
-      if (!userMsg.isCorrect) {
+      if (hasRealError) {
         setIsProcessing(false);
         return;
       }
@@ -205,26 +199,23 @@ NO markdown, ONLY JSON.`
         messages: [
           {
             role: 'system',
-            content: `Korean conversation teacher.
-
-CRITICAL: Return ONLY valid JSON, NO markdown:
+            content: `Korean teacher. Return ONLY valid JSON:
 {
   "response": "100% Korean response",
-  "vocabulary": [{"word": "단어", "meaning": "nghĩa tiếng Việt", "pronunciation": "phiên âm", "example": "Ví dụ tiếng Hàn (Nghĩa tiếng Việt)"}],
-  "grammar": [{"pattern": "문법", "explanation": "Giải thích chi tiết tiếng Việt", "usage": "Khi nào dùng, cách dùng", "examples": ["VD1 (nghĩa)", "VD2 (nghĩa)", "VD3 (nghĩa)"]}]
+  "vocabulary": [{"word": "단어", "meaning": "nghĩa", "pronunciation": "phát âm", "example": "VD (nghĩa)"}],
+  "grammar": [{"pattern": "문법", "explanation": "Giải thích", "usage": "Cách dùng", "examples": ["VD1", "VD2"]}]
 }
 
-Rules:
 - Response 100% Korean
-- If QUESTION: Answer directly
-- If STATEMENT: Continue conversation naturally
+- If QUESTION: Answer it
+- If STATEMENT: Continue conversation
 - Level: ${settings.userLevel.join(', ') || 'beginner'}
-- Include 4-6 vocab + 2-4 grammar with DETAILED examples`
+- 4-6 vocab + 2-4 grammar`
           },
           ...recentMessages,
           { 
             role: 'user', 
-            content: `${userMsg.correctedText} ${isQuestion ? '[QUESTION - Answer it clearly]' : '[STATEMENT - Respond conversationally]'}` 
+            content: `${userMsg.correctedText} ${isQuestion ? '[QUESTION]' : '[STATEMENT]'}` 
           }
         ],
         temperature: 0.7
@@ -400,7 +391,7 @@ Rules:
             {msg.type === 'user' ? (
               <div style={{background: msg.isCorrect ? '#e3f2fd' : '#ffebee', padding: '15px', borderRadius: '15px', display: 'inline-block', maxWidth: '85%'}}>
                 {!msg.isCorrect && (
-                  <div style={{textDecoration: 'line-through', color: '#f44336', marginBottom: '8px'}}>
+                  <div style={{textDecoration: 'line-through', color: '#f44336', marginBottom: '8px', fontSize: '15px'}}>
                     {msg.originalText}
                   </div>
                 )}
@@ -409,7 +400,7 @@ Rules:
                   {msg.isCorrect && <span style={{marginLeft: '6px', fontSize: '14px'}}>✓</span>}
                 </div>
                 
-                {!msg.isCorrect && (
+                {!msg.isCorrect && msg.details && (
                   <button 
                     onClick={() => toggleDetails(msg.id)}
                     style={{marginTop: '8px', padding: '8px 16px', background: expandedDetails[msg.id] ? '#ff9800' : '#2196f3', color: 'white', border: 'none', borderRadius: '20px', cursor: 'pointer', fontSize: '13px', width: '100%'}}
