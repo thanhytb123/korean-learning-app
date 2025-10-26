@@ -18,6 +18,7 @@ const KoreanLearningApp = () => {
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const recognitionRef = useRef(null);
+  const recognitionTimeoutRef = useRef(null);
 
   const callOpenAI = async (endpoint, body) => {
     const response = await fetch('/api/openai', {
@@ -59,8 +60,10 @@ const KoreanLearningApp = () => {
     };
   }, []);
 
-  const handleVoiceStart = async () => {
-    if (micPermission !== 'granted' || isProcessing) return;
+  const handleVoiceStart = async (e) => {
+    e.preventDefault(); // Ngăn chặn copy/select
+    
+    if (micPermission !== 'granted' || isProcessing || isRecording) return;
     
     setIsRecording(true);
     
@@ -77,6 +80,8 @@ const KoreanLearningApp = () => {
           const transcript = event.results[0][0].transcript;
           
           if (transcript && transcript.trim().length > 0) {
+            clearTimeout(recognitionTimeoutRef.current);
+            
             setIsRecording(false);
             
             if (mediaRecorderRef.current) {
@@ -90,32 +95,62 @@ const KoreanLearningApp = () => {
           }
         };
         
-        recognitionRef.current.onerror = () => {
+        recognitionRef.current.onerror = (e) => {
+          console.error('Recognition error:', e.error);
           setIsRecording(false);
+          clearTimeout(recognitionTimeoutRef.current);
+        };
+        
+        recognitionRef.current.onend = () => {
+          console.log('Recognition ended');
         };
         
         recognitionRef.current.start();
+        
+        // Timeout fallback nếu không nhận diện được sau 5 giây
+        recognitionTimeoutRef.current = setTimeout(() => {
+          if (isRecording) {
+            setIsRecording(false);
+            if (recognitionRef.current) {
+              try { recognitionRef.current.stop(); } catch (e) {}
+            }
+            if (mediaRecorderRef.current) {
+              try {
+                mediaRecorderRef.current.stop();
+                mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
+              } catch (e) {}
+            }
+          }
+        }, 5000);
       }
     } catch (error) {
+      console.error('Start error:', error);
       setIsRecording(false);
     }
   };
 
-  const handleVoiceStop = () => {
+  const handleVoiceStop = (e) => {
+    e.preventDefault(); // Ngăn chặn copy/select
+    
+    clearTimeout(recognitionTimeoutRef.current);
+    
+    // Đợi 1 giây để speech recognition xử lý xong
     setTimeout(() => {
       if (isRecording) {
         setIsRecording(false);
+        
+        if (recognitionRef.current) {
+          try { recognitionRef.current.stop(); } catch (e) {}
+        }
+        
         if (mediaRecorderRef.current) {
           try {
             mediaRecorderRef.current.stop();
             mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
           } catch (e) {}
         }
-        if (recognitionRef.current) {
-          try { recognitionRef.current.stop(); } catch (e) {}
-        }
       }
-    }, 1500);
+    }, 1000);
   };
 
   const handleTextSubmit = (e) => {
@@ -306,7 +341,7 @@ const KoreanLearningApp = () => {
             </select>
           </div>
           <div>
-            <label style={{display: 'block', marginBottom: '5px'}}>Trình độ ngữ pháp đã biết:</label>
+            <label style={{display: 'block', marginBottom: '5px'}}>Trình độ ngữ pháp:</label>
             <input
               type="text"
               placeholder="VD: -이에요, -아요/어요"
@@ -333,21 +368,12 @@ const KoreanLearningApp = () => {
         </div>
       )}
       
-      {micPermission === 'denied' && (
-        <div className="permission-alert">
-          <div className="alert-content">
-            <h2>⚠️ Microphone bị từ chối</h2>
-            <p>Bạn có thể dùng chế độ nhập text bên dưới</p>
-          </div>
-        </div>
-      )}
-      
-      <div className="chat-container" style={{paddingBottom: '180px'}}>
+      <div className="chat-container" style={{paddingBottom: '100px'}}>
         {messages.length === 0 && (
           <div className="welcome-message" style={{textAlign: 'center', padding: '20px'}}>
             <h2 style={{fontSize: '24px', marginBottom: '15px'}}>환영합니다!</h2>
-            <p style={{fontSize: '16px', color: '#666'}}>Nhập câu tiếng Hàn bên dưới để bắt đầu học!</p>
-            <p style={{fontSize: '14px', color: '#999', marginTop: '10px'}}>💡 Ví dụ: 안녕하세요, 감사합니다</p>
+            <p style={{fontSize: '16px', color: '#666'}}>Nhập hoặc nói câu tiếng Hàn bên dưới</p>
+            <p style={{fontSize: '14px', color: '#999', marginTop: '10px'}}>💡 VD: [translate:안녕하세요], [translate:감사합니다]</p>
           </div>
         )}
         
@@ -485,76 +511,86 @@ const KoreanLearningApp = () => {
         )}
       </div>
       
+      {/* INPUT AREA - Inline với nút mic */}
       <div style={{
         position: 'fixed',
         bottom: 0,
         left: 0,
         right: 0,
         background: 'white',
-        padding: '15px',
+        padding: '12px',
         boxShadow: '0 -2px 10px rgba(0,0,0,0.1)',
         zIndex: 1000
       }}>
-        <form onSubmit={handleTextSubmit} style={{marginBottom: '10px'}}>
-          <div style={{display: 'flex', gap: '10px'}}>
-            <input
-              type="text"
-              value={textInput}
-              onChange={(e) => setTextInput(e.target.value)}
-              placeholder="Nhập câu tiếng Hàn... (VD: 안녕하세요)"
-              disabled={isProcessing}
-              style={{
-                flex: 1,
-                padding: '12px',
-                fontSize: '16px',
-                border: '2px solid #2196f3',
-                borderRadius: '25px',
-                outline: 'none'
-              }}
-            />
+        <form onSubmit={handleTextSubmit} style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
+          <input
+            type="text"
+            value={textInput}
+            onChange={(e) => setTextInput(e.target.value)}
+            placeholder="Nhập câu tiếng Hàn..."
+            disabled={isProcessing || isRecording}
+            style={{
+              flex: 1,
+              padding: '14px',
+              fontSize: '16px',
+              border: '2px solid #2196f3',
+              borderRadius: '25px',
+              outline: 'none'
+            }}
+          />
+          
+          {micPermission === 'granted' && (
             <button
-              type="submit"
-              disabled={isProcessing || !textInput.trim()}
-              style={{
-                padding: '12px 24px',
-                background: isProcessing || !textInput.trim() ? '#ccc' : '#2196f3',
-                color: 'white',
-                border: 'none',
-                borderRadius: '25px',
-                cursor: isProcessing || !textInput.trim() ? 'not-allowed' : 'pointer',
-                fontSize: '16px',
-                fontWeight: 'bold'
-              }}
-            >
-              {isProcessing ? '⏳' : '📨'}
-            </button>
-          </div>
-        </form>
-
-        {micPermission === 'granted' && (
-          <div style={{textAlign: 'center'}}>
-            <button
+              type="button"
               onMouseDown={handleVoiceStart}
               onMouseUp={handleVoiceStop}
               onTouchStart={handleVoiceStart}
               onTouchEnd={handleVoiceStop}
+              onContextMenu={(e) => e.preventDefault()}
               disabled={isProcessing}
               style={{
-                width: '100%',
-                padding: '15px',
+                width: '56px',
+                height: '56px',
                 background: isRecording ? '#f44336' : '#4caf50',
                 color: 'white',
                 border: 'none',
-                borderRadius: '25px',
+                borderRadius: '50%',
                 cursor: isProcessing ? 'not-allowed' : 'pointer',
-                fontSize: '16px',
-                fontWeight: 'bold'
+                fontSize: '24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                userSelect: 'none',
+                WebkitUserSelect: 'none',
+                MozUserSelect: 'none',
+                msUserSelect: 'none',
+                WebkitTouchCallout: 'none'
               }}
             >
-              {isRecording ? '🎤 Đang ghi...' : '🎤 Nhấn giữ để nói (không ổn định)'}
+              🎤
             </button>
-          </div>
-        )}
+          )}
+          
+          <button
+            type="submit"
+            disabled={isProcessing || !textInput.trim() || isRecording}
+            style={{
+              width: '56px',
+              height: '56px',
+              background: isProcessing || !textInput.trim() ? '#ccc' : '#2196f3',
+              color: 'white',
+              border: 'none',
+              borderRadius: '50%',
+              cursor: isProcessing || !textInput.trim() ? 'not-allowed' : 'pointer',
+              fontSize: '24px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            {isProcessing ? '⏳' : '➤'}
+          </button>
+        </form>
       </div>
     </div>
   );
