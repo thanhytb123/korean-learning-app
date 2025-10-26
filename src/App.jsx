@@ -402,26 +402,22 @@ IMPORTANT: List ALL grammar patterns used in your response. Include 4-6 vocabula
             )}
           </div>
         ))}
+        
+        {isProcessing && (
+          <div style={{marginBottom: '15px', width: '100%'}}>
+            <div style={{background: '#f5f5f5', padding: '15px', borderRadius: '15px', maxWidth: '85%'}}>
+              <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
+                <div className="typing-indicator">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+                <span style={{fontSize: '14px', color: '#666'}}>AI đang suy nghĩ...</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-      
-      {isProcessing && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(255,255,255,0.95)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 9999
-        }}>
-          <div className="spinner" style={{width: '60px', height: '60px', borderWidth: '6px'}}></div>
-          <p style={{marginTop: '20px', color: '#333', fontSize: '18px', fontWeight: 'bold'}}>Đang xử lý...</p>
-        </div>
-      )}
       
       <div style={{position: 'fixed', bottom: 0, left: 0, right: 0, background: 'white', padding: '12px', boxShadow: '0 -2px 10px rgba(0,0,0,0.1)', zIndex: 1000}}>
         <form onSubmit={handleTextSubmit} style={{marginBottom: '10px'}}>
