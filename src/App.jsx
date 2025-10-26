@@ -166,21 +166,20 @@ const KoreanLearningApp = () => {
         messages: [
           {
             role: 'system',
-            content: `**RETURN JSON** - Korean grammar checker. Subject omission = OK.
+            content: `**RETURN JSON** Grammar checker. Subject omission OK in Korean.
 
-CORRECT: "밥 먹었어?", "먹었어요", "좋아", "가자", "네" (has verb/adj/이다)
-ERROR: "밥", "저는", "저는 밥", "한국어" (no verb/adj/이다)
+CORRECT: "밥 먹었어?", "먹었어요", "좋아" (has verb/adj)
+ERROR: "밥", "저는", "한국어" (no verb/adj)
 
-Return JSON:
-{"isCorrect": true/false, "corrected": "text", "errorType": "none|incomplete|grammar|vocabulary|word-order", "explanation": "Vietnamese if error with examples"}`
+JSON: {"isCorrect": true/false, "corrected": "text", "errorType": "none|incomplete|grammar", "explanation": "Việt if error"}`
           },
           { 
             role: 'user', 
-            content: `Context: ${recentContext || 'First'}\nAnalyze: "${userText}"` 
+            content: `"${userText}"` 
           }
         ],
         temperature: 0.1,
-        max_tokens: 400
+        max_tokens: 300
       });
       
       const correctionData = await correctionResponse.json();
@@ -230,16 +229,30 @@ Return JSON:
         messages: [
           {
             role: 'system',
-            content: `**RETURN JSON** - Korean teacher. Reply 2-3 full sentences (use ,, for pauses).
+            content: `**RETURN JSON** Korean teacher. Reply 2-3 sentences with ,, for pauses.
 
-JSON format:
+CRITICAL RULES:
+1. Vocabulary: ONLY words YOU write in response (3-5 max)
+2. Grammar: ONLY patterns YOU use in response (2-4 max)
+3. Each must have: detailed Việt explanation + 3 examples
+
+Example response: "네,, 밥 먹었어요! 맛있었어요."
+Correct analysis:
+- Vocab: 밥, 먹다, 맛있다 (ONLY these 3)
+- Grammar: -았/었어요 (ONLY this 1)
+
+JSON:
 {
-  "response": "Korean response with ,,",
-  "vocabulary": [{"word": "from YOUR response", "meaning": "Việt", "pronunciation": "...", "example": "Korean (Việt)"}],
-  "grammar": [{"pattern": "from YOUR response like -었어요, -는데", "explanation": "Việt", "usage": "Việt", "examples": ["Ex1 (Việt)", "Ex2 (Việt)", "Ex3 (Việt)"]}]
+  "response": "Korean with ,,",
+  "vocabulary": [
+    {"word": "word FROM response", "meaning": "Việt", "pronunciation": "romanization", "example": "Korean sentence (Việt translation)"}
+  ],
+  "grammar": [
+    {"pattern": "pattern FROM response", "explanation": "Detailed Việt explanation", "usage": "When to use in Việt", "examples": ["Ex1 Korean (Việt)", "Ex2 Korean (Việt)", "Ex3 Korean (Việt)"]}
+  ]
 }
 
-ONLY list vocabulary and grammar YOU actually use in your Korean response. No extras.`
+NO extra words/grammar not in your response!`
           },
           ...recentMessages,
           { 
@@ -247,8 +260,8 @@ ONLY list vocabulary and grammar YOU actually use in your Korean response. No ex
             content: userMsg.correctedText
           }
         ],
-        temperature: 0.85,
-        max_tokens: 1000,
+        temperature: 0.9,
+        max_tokens: 1200,
         response_format: { type: "json_object" }
       });
       
