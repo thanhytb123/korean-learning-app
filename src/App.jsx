@@ -15,8 +15,6 @@ const KoreanLearningApp = () => {
   
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
-  const recognitionRef = useRef(null);
-  const hasReceivedResultRef = useRef(false);
 
   const addDebugLog = (message) => {
     console.log(message);
@@ -60,32 +58,6 @@ const KoreanLearningApp = () => {
     }
   };
 
-  useEffect(() => {
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      alert('Trình duyệt không hỗ trợ nhận diện giọng nói. Vui lòng dùng Chrome hoặc Edge.');
-      addDebugLog('❌ Speech Recognition not supported');
-      return;
-    }
-    
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    recognitionRef.current = new SpeechRecognition();
-    recognitionRef.current.lang = 'ko-KR';
-    recognitionRef.current.continuous = true; // Cho phép nhận diện liên tục
-    recognitionRef.current.interimResults = true; // Hiển thị kết quả tạm thời
-    recognitionRef.current.maxAlternatives = 1;
-    addDebugLog('✅ Speech Recognition initialized');
-    
-    return () => {
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.stop();
-        } catch (e) {
-          // Ignore
-        }
-      }
-    };
-  }, []);
-
   const handleMouseDown = async () => {
     if (micPermission !== 'granted') {
       alert('Vui lòng cấp quyền microphone trước');
@@ -96,9 +68,8 @@ const KoreanLearningApp = () => {
       return;
     }
     
-    addDebugLog('▶️ Starting recording...');
+    addDebugLog('▶️ Recording started with Whisper...');
     setIsRecording(true);
-    hasReceivedResultRef.current = false;
     audioChunksRef.current = [];
     
     try {
@@ -106,132 +77,124 @@ const KoreanLearningApp = () => {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true
+          autoGainControl: true,
+          sampleRate: 16000 // Tối ưu cho Whisper
         } 
       });
       
-      mediaRecorderRef.current = new MediaRecorder(stream);
+      mediaRecorderRef.current = new MediaRecorder(stream, {
+        mimeType: 'audio/webm;codecs=opus'
+      });
       
       mediaRecorderRef.current.ondataavailable = (event) => {
-        audioChunksRef.current.push(event.data);
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+      
+      mediaRecorderRef.current.onstop = async () => {
+        addDebugLog('⏹️ Recording stopped, processing...');
+        
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        stream.getTracks().forEach(track => track.stop());
+        
+        addDebugLog(`📦 Audio size: ${audioBlob.size} bytes`);
+        
+        if (audioBlob.size < 1000) {
+          alert('Audio quá ngắn! Hãy nói lâu hơn (2-5 giây).');
+          setIsRecording(false);
+          return;
+        }
+        
+        // Gọi Whisper API
+        await transcribeWithWhisper(audioBlob);
       };
       
       mediaRecorderRef.current.start();
-      addDebugLog('🎙️ MediaRecorder started');
+      addDebugLog('🎙️ MediaRecorder started - HÃY NÓI!');
       
-      if (recognitionRef.current) {
-        recognitionRef.current.onresult = async (event) => {
-          const lastResultIndex = event.results.length - 1;
-          const transcript = event.results[lastResultIndex][0].transcript;
-          const isFinal = event.results[lastResultIndex].isFinal;
-          const confidence = event.results[lastResultIndex][0].confidence;
-          
-          if (isFinal && !hasReceivedResultRef.current) {
-            hasReceivedResultRef.current = true;
-            addDebugLog(`🎯 FINAL: "${transcript}" (${(confidence * 100).toFixed(0)}%)`);
-            
-            // Tự động dừng
-            setIsRecording(false);
-            
-            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-              mediaRecorderRef.current.stop();
-              mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
-            }
-            
-            try {
-              if (recognitionRef.current) {
-                recognitionRef.current.stop();
-              }
-            } catch (e) {
-              // Ignore
-            }
-            
-            if (transcript && transcript.trim().length > 0) {
-              await processUserInput(transcript);
-            } else {
-              alert('Không nhận diện được. Hãy thử lại!');
-            }
-          } else if (!isFinal) {
-            addDebugLog(`🔄 Interim: "${transcript}"`);
-          }
-        };
-        
-        recognitionRef.current.onerror = (event) => {
-          addDebugLog(`❌ Speech error: ${event.error}`);
-          
-          if (event.error === 'no-speech') {
-            setIsRecording(false);
-            alert('Không nghe thấy giọng nói!\n\n💡 Mẹo:\n- Đợi 1 giây sau khi nhấn nút\n- Nói TO và RÕ\n- Giữ nút khi đang nói\n- Thử nói: "안녕하세요"');
-          } else if (event.error === 'audio-capture') {
-            setIsRecording(false);
-            alert('Lỗi microphone! Kiểm tra lại quyền truy cập.');
-          } else if (event.error !== 'aborted') {
-            addDebugLog(`⚠️ Other error: ${event.error}`);
-          }
-        };
-        
-        recognitionRef.current.onend = () => {
-          addDebugLog('⏹️ Speech recognition ended');
-        };
-        
-        recognitionRef.current.onstart = () => {
-          addDebugLog('🎤 Speech recognition started - ĐỢI 1 GIÂY RỒI NÓI!');
-        };
-        
-        recognitionRef.current.onspeechstart = () => {
-          addDebugLog('🗣️ Speech detected!');
-        };
-        
-        recognitionRef.current.onspeechend = () => {
-          addDebugLog('🔇 Speech ended, waiting for result...');
-        };
-        
-        try {
-          recognitionRef.current.start();
-          addDebugLog('✅ Recognition started');
-        } catch (e) {
-          addDebugLog(`❌ Start error: ${e.message}`);
-        }
-      }
     } catch (error) {
       addDebugLog(`❌ Error: ${error.message}`);
       setIsRecording(false);
-      alert(`Lỗi khởi động: ${error.message}`);
+      alert(`Lỗi: ${error.message}`);
     }
   };
 
   const handleMouseUp = () => {
     if (!isRecording) return;
     
-    addDebugLog('⏸️ Button released - đợi kết quả...');
+    addDebugLog('⏸️ Button released');
+    setIsRecording(false);
     
-    // Đợi 2 giây để Speech API xử lý xong
-    setTimeout(() => {
-      if (isRecording && !hasReceivedResultRef.current) {
-        addDebugLog('⚠️ Timeout - không nhận được kết quả');
-        setIsRecording(false);
-        
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-          mediaRecorderRef.current.stop();
-          mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
-        }
-        
-        try {
-          if (recognitionRef.current) {
-            recognitionRef.current.stop();
-          }
-        } catch (e) {
-          // Ignore
-        }
-        
-        alert('Không nhận diện được!\n\n💡 Hãy thử:\n- Giữ nút LÂU hơn (3-5 giây)\n- Nói ngay sau 1 giây\n- Nói TO và RÕ RÀNG hơn');
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+  };
+
+  const transcribeWithWhisper = async (audioBlob) => {
+    try {
+      setIsProcessing(true);
+      addDebugLog('🎯 Transcribing with Whisper API...');
+      
+      // Convert Blob to Base64
+      const base64Audio = await blobToBase64(audioBlob);
+      
+      // Call Whisper API through our backend
+      const response = await fetch('/api/openai', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          endpoint: '/v1/audio/transcriptions',
+          method: 'POST',
+          body: {
+            file: base64Audio,
+            model: 'whisper-1',
+            language: 'ko',
+            response_format: 'json'
+          },
+          isFormData: true
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Whisper API failed');
       }
-    }, 2000);
+      
+      const data = await response.json();
+      const transcript = data.text;
+      
+      addDebugLog(`✅ Whisper: "${transcript}"`);
+      
+      if (transcript && transcript.trim().length > 0) {
+        await processUserInput(transcript);
+      } else {
+        alert('Không nhận diện được giọng nói. Hãy nói TO và RÕ hơn!');
+        setIsProcessing(false);
+      }
+      
+    } catch (error) {
+      addDebugLog(`❌ Whisper error: ${error.message}`);
+      alert(`Lỗi nhận diện: ${error.message}\n\nHãy thử lại hoặc dùng nút TEST.`);
+      setIsProcessing(false);
+    }
+  };
+
+  const blobToBase64 = (blob) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result.split(',')[1];
+        resolve(base64String);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
   };
 
   const processUserInput = async (userText) => {
     addDebugLog(`🔄 Processing: "${userText}"`);
-    setIsProcessing(true);
     
     try {
       const correctionResponse = await callOpenAI('/v1/chat/completions', {
@@ -276,7 +239,7 @@ const KoreanLearningApp = () => {
       };
       
       setMessages(prev => [...prev, userMessage]);
-      addDebugLog(`📝 User message added (correct: ${correctionResult.isCorrect})`);
+      addDebugLog(`📝 User message added`);
       
       if (!correctionResult.isCorrect) {
         setIsProcessing(false);
@@ -292,17 +255,15 @@ const KoreanLearningApp = () => {
 
 1. You MUST respond ONLY in KOREAN (한국어). NO Vietnamese. NO English.
 2. Use grammar level: ${settings.userLevel.join(', ') || 'beginner (초급)'}
-3. Your response must be a natural, conversational Korean sentence
-4. Return ONLY this JSON format (no markdown, no code blocks):
+3. Your response must be natural conversational Korean
+4. Return ONLY this JSON format:
 
-{"response": "한국어로만 응답", "vocabulary": ["단어: Vietnamese meaning"], "grammar": ["문법: Vietnamese explanation"]}
+{"response": "한국어 응답", "vocabulary": ["단어: meaning"], "grammar": ["문법: explanation"]}
 
 Example:
-User: "안녕하세요"
-You return:
-{"response": "안녕하세요! 만나서 반가워요. 오늘 기분이 어때요?", "vocabulary": ["만나다: gặp", "반갑다: vui mừng", "기분: tâm trạng"], "grammar": ["-아/어요: thể lịch sự thân mật"]}
+{"response": "안녕하세요! 만나서 반가워요. 오늘 기분이 어때요?", "vocabulary": ["만나다: gặp", "기분: tâm trạng"], "grammar": ["-아/어요: lịch sự"]}
 
-Remember: Response MUST be 100% Korean language only!`
+Response MUST be 100% Korean!`
           },
           {
             role: 'user',
@@ -321,7 +282,6 @@ Remember: Response MUST be 100% Korean language only!`
         const cleanedText = responseText.replace(/``````\n?/g, '').trim();
         aiResult = JSON.parse(cleanedText);
       } catch (e) {
-        addDebugLog(`⚠️ JSON parse error, using fallback`);
         aiResult = {
           response: aiData.choices[0].message.content,
           vocabulary: [],
@@ -344,8 +304,8 @@ Remember: Response MUST be 100% Korean language only!`
       await playTTS(aiMessage.id, aiResult.response);
       
     } catch (error) {
-      addDebugLog(`❌ Processing error: ${error.message}`);
-      alert(`Lỗi xử lý: ${error.message}`);
+      addDebugLog(`❌ Error: ${error.message}`);
+      alert(`Lỗi: ${error.message}`);
     } finally {
       setIsProcessing(false);
     }
@@ -378,16 +338,15 @@ Remember: Response MUST be 100% Korean language only!`
       
       audio.onended = () => {
         setCurrentAudioPlaying(null);
-        addDebugLog('✅ TTS playback ended');
+        addDebugLog('✅ TTS ended');
       };
       
       audio.onerror = (e) => {
-        addDebugLog(`❌ Audio error: ${e}`);
+        addDebugLog(`❌ Audio error`);
         setCurrentAudioPlaying(null);
       };
       
       await audio.play();
-      addDebugLog('▶️ TTS started');
       
     } catch (error) {
       addDebugLog(`❌ TTS error: ${error.message}`);
@@ -426,7 +385,7 @@ Remember: Response MUST be 100% Korean language only!`
   };
 
   const testWithText = () => {
-    const testText = prompt('Nhập câu tiếng Hàn để test:\n(VD: 안녕하세요)');
+    const testText = prompt('Nhập câu tiếng Hàn:\n(VD: 안녕하세요)');
     if (testText) {
       processUserInput(testText);
     }
@@ -466,24 +425,25 @@ Remember: Response MUST be 100% Korean language only!`
       
       {micPermission === 'granted' && (
         <>
-          <div style={{background: '#f0f0f0', padding: '10px', fontSize: '10px', maxHeight: '100px', overflow: 'auto', margin: '10px'}}>
-            <strong>Debug Log:</strong>
-            {debugLog.map((log, idx) => <div key={idx}>{log}</div>)}
+          <div style={{background: '#e8f5e9', padding: '10px', margin: '10px', borderRadius: '10px', border: '2px solid #4caf50'}}>
+            <strong>✅ Dùng OpenAI Whisper - Nhận diện CHÍNH XÁC!</strong>
+            <div style={{fontSize: '11px', marginTop: '5px'}}>
+              {debugLog.map((log, idx) => <div key={idx}>{log}</div>)}
+            </div>
           </div>
 
           <div className="chat-container">
             {messages.length === 0 && (
               <div className="welcome-message">
-                <h2>환영합니다! Chào mừng bạn đến với ứng dụng học tiếng Hàn</h2>
+                <h2>환영합니다! Korean Learning App với Whisper AI</h2>
                 <p><strong>🎤 Cách sử dụng:</strong></p>
-                <ol style={{textAlign: 'left', maxWidth: '400px', margin: '10px auto'}}>
+                <ol style={{textAlign: 'left', maxWidth: '400px', margin: '10px auto', fontSize: '15px'}}>
                   <li>Nhấn giữ nút đỏ</li>
-                  <li><strong>Đợi 1 giây</strong></li>
-                  <li>Nói <strong>TO và RÕ</strong> bằng tiếng Hàn</li>
-                  <li><strong>Giữ nút</strong> khi đang nói (3-5 giây)</li>
-                  <li>Thả nút sau khi nói xong</li>
+                  <li>Nói TO và RÕ bằng tiếng Hàn (2-5 giây)</li>
+                  <li>Thả nút</li>
+                  <li>Đợi Whisper xử lý (~3 giây)</li>
                 </ol>
-                <p style={{fontSize: '14px', color: '#666'}}>💡 Thử nói: "안녕하세요" (Xin chào)</p>
+                <p style={{fontSize: '14px', color: '#4caf50', fontWeight: 'bold'}}>💡 Whisper chính xác 95%+ - Không cần môi trường yên tĩnh!</p>
               </div>
             )}
             
@@ -561,7 +521,7 @@ Remember: Response MUST be 100% Korean language only!`
             {isProcessing && (
               <div className="processing">
                 <div className="spinner"></div>
-                <p>Đang xử lý...</p>
+                <p>Đang xử lý với Whisper AI...</p>
               </div>
             )}
           </div>
@@ -572,7 +532,7 @@ Remember: Response MUST be 100% Korean language only!`
               style={{
                 background: '#2196F3',
                 color: 'white',
-                padding: '12px 20px',
+                padding: '12px',
                 border: 'none',
                 borderRadius: '50px',
                 fontSize: '14px',
@@ -582,7 +542,7 @@ Remember: Response MUST be 100% Korean language only!`
                 width: '100%'
               }}
             >
-              🧪 TEST: Nhập text (nếu mic không hoạt động)
+              📝 Nhập text thủ công
             </button>
 
             <button
@@ -593,7 +553,7 @@ Remember: Response MUST be 100% Korean language only!`
               onTouchEnd={handleMouseUp}
               disabled={isProcessing}
             >
-              {isRecording ? '🎤 ĐANG GHI - ĐANG NÓI!' : '🎤 Nhấn giữ để nói'}
+              {isRecording ? '🎤 ĐANG GHI - NÓI NGAY!' : isProcessing ? '⏳ Đang xử lý...' : '🎤 Nhấn giữ để nói'}
             </button>
             
             <div className="settings">
@@ -611,7 +571,7 @@ Remember: Response MUST be 100% Korean language only!`
               <button 
                 className="btn-settings"
                 onClick={() => {
-                  const level = prompt('Nhập ngữ pháp bạn đã biết (cách nhau bằng dấu phẩy):\nVí dụ: -이에요/예요, -아요/어요, -ㄹ 거예요');
+                  const level = prompt('Nhập ngữ pháp bạn đã biết:\nVD: -이에요/예요, -아요/어요');
                   if (level) {
                     setSettings({...settings, userLevel: level.split(',').map(s => s.trim())});
                   }
