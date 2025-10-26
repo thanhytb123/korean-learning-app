@@ -99,7 +99,6 @@ const KoreanLearningApp = () => {
     setIsProcessing(true);
     
     try {
-      // Step 1: Check grammar (fast)
       const correctionResponse = await callOpenAI('/v1/chat/completions', {
         model: 'gpt-4o-mini',
         messages: [
@@ -139,23 +138,47 @@ const KoreanLearningApp = () => {
         return;
       }
       
-      // Step 2: Get AI response (optimized prompt)
+      const isQuestion = correction.corrected.includes('?') || 
+                        correction.corrected.includes('ㅂ니까') || 
+                        correction.corrected.includes('어요?') ||
+                        correction.corrected.includes('아요?') ||
+                        correction.corrected.includes('습니까') ||
+                        correction.corrected.includes('ㄹ까요');
+      
+      const recentMessages = messages.slice(-3).map(m => ({
+        role: m.type === 'user' ? 'user' : 'assistant',
+        content: m.type === 'user' ? m.correctedText : m.text
+      }));
+      
       const aiResponse = await callOpenAI('/v1/chat/completions', {
         model: 'gpt-4o-mini',
         messages: [
           {
             role: 'system',
-            content: `Korean teacher. Response 100% Korean. Return JSON:
+            content: `Korean teacher. Natural conversation with learner.
+
+RULES:
+1. Response 100% Korean
+2. Level: ${settings.userLevel.join(', ') || 'beginner'}
+3. If user asks question (?): Answer directly
+4. If user makes statement: Continue conversation (ask follow-up or respond)
+5. Keep it natural and engaging
+
+Return JSON:
 {
   "response": "Korean response",
   "vocabulary": [{"word": "단어", "meaning": "nghĩa", "pronunciation": "phát âm", "example": "VD"}],
   "grammar": [{"pattern": "문법", "explanation": "Giải thích", "usage": "Cách dùng", "examples": ["VD1", "VD2"]}]
 }
-Include 4-5 vocabulary + 2-3 grammar patterns.`
+4-5 vocab + 2-3 grammar.`
           },
-          { role: 'user', content: correction.corrected }
+          ...recentMessages,
+          { 
+            role: 'user', 
+            content: `${correction.corrected}${isQuestion ? ' [QUESTION]' : ' [STATEMENT]'}` 
+          }
         ],
-        temperature: 0.5
+        temperature: 0.7
       });
       
       const aiData = await aiResponse.json();
@@ -182,8 +205,6 @@ Include 4-5 vocabulary + 2-3 grammar patterns.`
       };
       
       setMessages(prev => [...prev, aiMsg]);
-      
-      // Step 3: Play TTS (parallel, don't wait)
       playTTS(aiMsg.id, aiResult.response);
       
     } catch (error) {
@@ -288,7 +309,7 @@ Include 4-5 vocabulary + 2-3 grammar patterns.`
           <div style={{textAlign: 'center', padding: '20px'}}>
             <h2 style={{fontSize: '24px', marginBottom: '15px'}}>환영합니다!</h2>
             <p style={{fontSize: '16px', color: '#666'}}>Nhập câu tiếng Hàn bên dưới</p>
-            <p style={{fontSize: '14px', color: '#999', marginTop: '10px'}}>💡 VD: 안녕하세요, 감사합니다</p>
+            <p style={{fontSize: '14px', color: '#999', marginTop: '10px'}}>💡 VD: 안녕하세요, 밥 먹었어요?</p>
           </div>
         )}
         
