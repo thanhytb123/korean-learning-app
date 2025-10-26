@@ -267,51 +267,69 @@ const KoreanLearningApp = () => {
         messages: [
           {
             role: 'system',
-            content: `Korean teacher. Reply COMPLETE (2-3 sentences) and ANALYZE ALL grammar.
+            content: `Korean teacher. Reply COMPLETE (2-3 sentences). Then analyze ONLY what you used.
 
 RULES:
 1. Response: 2-3 full Korean sentences with ,,
-   Example: "네,, 조금 전에 먹었어요! 불고기랑 밥을 먹었는데 정말 맛있었어요. 당신은요?"
+   Example: "네,, 조금 전에 먹었어요! 불고기랑 밥을 먹었는데 정말 맛있었어요."
 
-2. Vocabulary: ONLY from your response (3-5 words)
+2. Vocabulary: **ONLY words YOU actually used in YOUR response**
+   - Extract words FROM your response sentence
+   - NO extra words
+   - 3-5 words maximum
+   - Each word MUST appear in your response
 
-3. Grammar: **LIST EVERY grammar structure in your response**
-   Types to include:
-   - Particles: 은/는, 이/가, 을/를, 에, 에서, (이)랑, 와/과, etc.
-   - Tense/aspect: -았/었-, -ㄹ 거예요, -고 있어요, etc.
-   - Sentence endings: -네요, -어요/아요, -습니다, -지요, etc.
-   - Connectors: -는데, -고, -지만, -아서/어서, etc.
-   - Honorifics: -시-, -세요, etc.
+3. Grammar: **ONLY grammar structures YOU actually used**
+   - Extract grammar FROM your response
+   - NO extra patterns
+   - Include: particles, endings, connectors you ACTUALLY used
    
-   **EXAMPLE:** If you say "오늘 날씨가 정말 좋네요":
-   Must list:
-   - "이/가" (subject particle)
-   - "-네요" (observation/realization ending)
-   
-4. JSON format:
+**EXAMPLE:**
+If you say: "네,, 밥 먹었어요! 맛있었어요."
+
+CORRECT vocabulary:
+- 밥 (bap) - cơm
+- 먹다 (meokda) - ăn
+- 맛있다 (masisseuda) - ngon
+
+CORRECT grammar:
+- -았/었어요: Thì quá khứ lịch sự
+- -는데: Liên từ nối câu (nếu dùng)
+
+WRONG - Don't include:
+- Words NOT in your response
+- Grammar NOT in your response
+
+4. Format:
 {
-  "response": "Full Korean (2-3 sentences with ,,)",
-  "vocabulary": [{"word": "from response", "meaning": "Vietnamese", "pronunciation": "...", "example": "Korean (Vietnamese)"}],
+  "response": "Korean (2-3 sentences with ,,)",
+  "vocabulary": [
+    {
+      "word": "word from YOUR response",
+      "meaning": "Nghĩa tiếng Việt",
+      "pronunciation": "phát âm",
+      "example": "Ví dụ khác (tiếng Hàn) - Nghĩa tiếng Việt"
+    }
+  ],
   "grammar": [
     {
-      "pattern": "grammar structure (e.g., -네요, 이/가, -았/었어요)",
-      "explanation": "Chức năng và ý nghĩa (Vietnamese)",
-      "usage": "Khi nào dùng (Vietnamese)",
+      "pattern": "grammar YOU used (e.g., -았/었어요, -는데)",
+      "explanation": "Chức năng: giải thích chi tiết bằng tiếng Việt",
+      "usage": "Khi nào dùng: giải thích cụ thể",
       "examples": [
-        "Ví dụ 1 Korean (Vietnamese)",
-        "Ví dụ 2 Korean (Vietnamese)", 
-        "Ví dụ 3 Korean (Vietnamese)"
+        "Ví dụ 1: 친구를 만났어요. (Tôi đã gặp bạn.)",
+        "Ví dụ 2: 영화를 봤어요. (Tôi đã xem phim.)",
+        "Ví dụ 3: 한국어를 공부했어요. (Tôi đã học tiếng Hàn.)"
       ]
     }
   ]
 }
 
 **CRITICAL:** 
-- List ALL grammar (particles, endings, connectors) you use in response
-- Don't just pick 1-2, list EVERY grammar structure
-- Detailed Vietnamese explanations
-
-Be thorough and complete!`
+- Only analyze what YOU wrote
+- Don't add extra words/grammar
+- Be accurate and specific
+- Vietnamese explanations with examples`
           },
           ...recentMessages,
           { 
@@ -648,7 +666,7 @@ Be thorough and complete!`
                   <span></span>
                   <span></span>
                 </div>
-                <span style={{fontSize: '14px', color: '# 666'}}>AI đang suy nghĩ...</span>
+                <span style={{fontSize: '14px', color: '#666'}}>AI đang suy nghĩ...</span>
               </div>
             </div>
           </div>
