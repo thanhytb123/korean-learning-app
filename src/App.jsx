@@ -11,15 +11,12 @@ const KoreanLearningApp = () => {
   });
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentAudioPlaying, setCurrentAudioPlaying] = useState(null);
-  const [debugLog, setDebugLog] = useState([]);
+  const [expandedDetails, setExpandedDetails] = useState({});
   
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
-
-  const addDebugLog = (message) => {
-    console.log(message);
-    setDebugLog(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`].slice(-10));
-  };
+  const recognitionRef = useRef(null);
+  const hasReceivedResultRef = useRef(false);
 
   const callOpenAI = async (endpoint, body, method = 'POST') => {
     const response = await fetch('/api/openai', {
@@ -50,13 +47,33 @@ const KoreanLearningApp = () => {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.getTracks().forEach(track => track.stop());
       setMicPermission('granted');
-      addDebugLog('✅ Microphone permission granted');
     } catch (error) {
       console.error('Microphone permission denied:', error);
       setMicPermission('denied');
-      addDebugLog('❌ Microphone permission denied');
     }
   };
+
+  useEffect(() => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      alert('Trình duyệt không hỗ trợ nhận diện giọng nói. Vui lòng dùng Chrome hoặc Edge.');
+      return;
+    }
+    
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognitionRef.current = new SpeechRecognition();
+    recognitionRef.current.lang = 'ko-KR';
+    recognitionRef.current.continuous = true;
+    recognitionRef.current.interimResults = true;
+    recognitionRef.current.maxAlternatives = 3; // Tăng lên để có nhiều lựa chọn
+    
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (e) {}
+      }
+    };
+  }, []);
 
   const handleMouseDown = async () => {
     if (micPermission !== 'granted') {
@@ -64,12 +81,10 @@ const KoreanLearningApp = () => {
       return;
     }
     
-    if (isProcessing) {
-      return;
-    }
+    if (isProcessing) return;
     
-    addDebugLog('▶️ Recording started with Whisper...');
     setIsRecording(true);
+    hasReceivedResultRef.current = false;
     audioChunksRef.current = [];
     
     try {
@@ -78,43 +93,66 @@ const KoreanLearningApp = () => {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
-          sampleRate: 16000 // Tối ưu cho Whisper
+          sampleRate: 44100 // Cao nhất để độ chính xác tốt hơn
         } 
       });
       
-      mediaRecorderRef.current = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus'
-      });
+      mediaRecorderRef.current = new MediaRecorder(stream);
       
       mediaRecorderRef.current.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
-      };
-      
-      mediaRecorderRef.current.onstop = async () => {
-        addDebugLog('⏹️ Recording stopped, processing...');
-        
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        stream.getTracks().forEach(track => track.stop());
-        
-        addDebugLog(`📦 Audio size: ${audioBlob.size} bytes`);
-        
-        if (audioBlob.size < 1000) {
-          alert('Audio quá ngắn! Hãy nói lâu hơn (2-5 giây).');
-          setIsRecording(false);
-          return;
-        }
-        
-        // Gọi Whisper API
-        await transcribeWithWhisper(audioBlob);
+        audioChunksRef.current.push(event.data);
       };
       
       mediaRecorderRef.current.start();
-      addDebugLog('🎙️ MediaRecorder started - HÃY NÓI!');
       
+      if (recognitionRef.current) {
+        recognitionRef.current.onresult = async (event) => {
+          const lastResultIndex = event.results.length - 1;
+          const result = event.results[lastResultIndex];
+          const transcript = result[0].transcript;
+          const isFinal = result.isFinal;
+          const confidence = result[0].confidence;
+          
+          if (isFinal && !hasReceivedResultRef.current && confidence > 0.5) {
+            hasReceivedResultRef.current = true;
+            
+            setIsRecording(false);
+            
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+              mediaRecorderRef.current.stop();
+              mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+            }
+            
+            try {
+              if (recognitionRef.current) {
+                recognitionRef.current.stop();
+              }
+            } catch (e) {}
+            
+            if (transcript && transcript.trim().length > 0) {
+              await processUserInput(transcript, confidence);
+            }
+          }
+        };
+        
+        recognitionRef.current.onerror = (event) => {
+          if (event.error === 'no-speech') {
+            setIsRecording(false);
+            alert('Không nghe thấy giọng nói!\n\n💡 Hãy:\n- Nói TO và RÕ hơn\n- Giữ nút lâu hơn (3-5 giây)\n- Thử lại');
+          }
+        };
+        
+        recognitionRef.current.onend = () => {
+          console.log('Speech recognition ended');
+        };
+        
+        try {
+          recognitionRef.current.start();
+        } catch (e) {
+          console.error('Start error:', e);
+        }
+      }
     } catch (error) {
-      addDebugLog(`❌ Error: ${error.message}`);
       setIsRecording(false);
       alert(`Lỗi: ${error.message}`);
     }
@@ -123,78 +161,28 @@ const KoreanLearningApp = () => {
   const handleMouseUp = () => {
     if (!isRecording) return;
     
-    addDebugLog('⏸️ Button released');
-    setIsRecording(false);
-    
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-    }
-  };
-
-  const transcribeWithWhisper = async (audioBlob) => {
-    try {
-      setIsProcessing(true);
-      addDebugLog('🎯 Transcribing with Whisper API...');
-      
-      // Convert Blob to Base64
-      const base64Audio = await blobToBase64(audioBlob);
-      
-      // Call Whisper API through our backend
-      const response = await fetch('/api/openai', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          endpoint: '/v1/audio/transcriptions',
-          method: 'POST',
-          body: {
-            file: base64Audio,
-            model: 'whisper-1',
-            language: 'ko',
-            response_format: 'json'
-          },
-          isFormData: true
-        })
-      });
-      
-      if (!response.ok) {
-        throw new Error('Whisper API failed');
+    setTimeout(() => {
+      if (isRecording && !hasReceivedResultRef.current) {
+        setIsRecording(false);
+        
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+          mediaRecorderRef.current.stop();
+          mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+        }
+        
+        try {
+          if (recognitionRef.current) {
+            recognitionRef.current.stop();
+          }
+        } catch (e) {}
+        
+        alert('Không nhận diện được!\n\n💡 Thử:\n- Giữ nút LÂU hơn\n- Nói ngay sau 1 giây\n- Hoặc dùng nút "Nhập text"');
       }
-      
-      const data = await response.json();
-      const transcript = data.text;
-      
-      addDebugLog(`✅ Whisper: "${transcript}"`);
-      
-      if (transcript && transcript.trim().length > 0) {
-        await processUserInput(transcript);
-      } else {
-        alert('Không nhận diện được giọng nói. Hãy nói TO và RÕ hơn!');
-        setIsProcessing(false);
-      }
-      
-    } catch (error) {
-      addDebugLog(`❌ Whisper error: ${error.message}`);
-      alert(`Lỗi nhận diện: ${error.message}\n\nHãy thử lại hoặc dùng nút TEST.`);
-      setIsProcessing(false);
-    }
+    }, 2000);
   };
 
-  const blobToBase64 = (blob) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result.split(',')[1];
-        resolve(base64String);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  };
-
-  const processUserInput = async (userText) => {
-    addDebugLog(`🔄 Processing: "${userText}"`);
+  const processUserInput = async (userText, confidence = 1.0) => {
+    setIsProcessing(true);
     
     try {
       const correctionResponse = await callOpenAI('/v1/chat/completions', {
@@ -202,21 +190,24 @@ const KoreanLearningApp = () => {
         messages: [
           {
             role: 'system',
-            content: `You are a Korean language teacher. Task:
-1. Check if the Korean sentence is grammatically correct
-2. If CORRECT: return JSON {"isCorrect": true, "corrected": "", "details": ""}
-3. If INCORRECT: return JSON {"isCorrect": false, "corrected": "corrected sentence", "details": "explanation in Vietnamese"}
-4. Return ONLY JSON, no other text`
+            content: `You are a Korean language teacher. Check the Korean sentence and return ONLY valid JSON:
+
+{
+  "isCorrect": true/false,
+  "corrected": "corrected sentence if wrong",
+  "details": "Vietnamese explanation if wrong"
+}
+
+Be strict on grammar, particles, and pronunciation patterns.`
           },
           {
             role: 'user',
-            content: `Check this Korean sentence: "${userText}"`
+            content: `Check: "${userText}"`
           }
         ],
-        temperature: 0.3
+        temperature: 0.2
       });
       
-      addDebugLog('✅ Got correction response');
       const correctionData = await correctionResponse.json();
       let correctionResult;
       
@@ -235,11 +226,11 @@ const KoreanLearningApp = () => {
         correctedText: correctionResult.isCorrect ? userText : correctionResult.corrected,
         isCorrect: correctionResult.isCorrect,
         details: correctionResult.details,
+        confidence: confidence,
         timestamp: new Date()
       };
       
       setMessages(prev => [...prev, userMessage]);
-      addDebugLog(`📝 User message added`);
       
       if (!correctionResult.isCorrect) {
         setIsProcessing(false);
@@ -251,19 +242,33 @@ const KoreanLearningApp = () => {
         messages: [
           {
             role: 'system',
-            content: `You are a Korean language learning assistant. CRITICAL RULES:
+            content: `You are a Korean teacher. RULES:
 
-1. You MUST respond ONLY in KOREAN (한국어). NO Vietnamese. NO English.
-2. Use grammar level: ${settings.userLevel.join(', ') || 'beginner (초급)'}
-3. Your response must be natural conversational Korean
-4. Return ONLY this JSON format:
+1. Response MUST be 100% Korean (한국어)
+2. Level: ${settings.userLevel.join(', ') || 'beginner'}
+3. Return ONLY this JSON:
 
-{"response": "한국어 응답", "vocabulary": ["단어: meaning"], "grammar": ["문법: explanation"]}
+{
+  "response": "Natural Korean response",
+  "vocabulary": [
+    {
+      "word": "한국어 단어",
+      "meaning": "nghĩa tiếng Việt",
+      "pronunciation": "phiên âm",
+      "example": "Ví dụ câu tiếng Hàn"
+    }
+  ],
+  "grammar": [
+    {
+      "pattern": "-문법 패턴",
+      "explanation": "Giải thích bằng tiếng Việt",
+      "usage": "Cách dùng chi tiết",
+      "examples": ["Ví dụ 1", "Ví dụ 2"]
+    }
+  ]
+}
 
-Example:
-{"response": "안녕하세요! 만나서 반가워요. 오늘 기분이 어때요?", "vocabulary": ["만나다: gặp", "기분: tâm trạng"], "grammar": ["-아/어요: lịch sự"]}
-
-Response MUST be 100% Korean!`
+Be detailed and educational!`
           },
           {
             role: 'user',
@@ -273,7 +278,6 @@ Response MUST be 100% Korean!`
         temperature: 0.7
       });
       
-      addDebugLog('✅ Got AI response');
       const aiData = await aiResponse.json();
       let aiResult;
       
@@ -300,11 +304,9 @@ Response MUST be 100% Korean!`
       };
       
       setMessages(prev => [...prev, aiMessage]);
-      addDebugLog('🤖 AI message added');
       await playTTS(aiMessage.id, aiResult.response);
       
     } catch (error) {
-      addDebugLog(`❌ Error: ${error.message}`);
       alert(`Lỗi: ${error.message}`);
     } finally {
       setIsProcessing(false);
@@ -313,14 +315,13 @@ Response MUST be 100% Korean!`
 
   const playTTS = async (messageId, text) => {
     try {
-      addDebugLog('🔊 Playing TTS...');
       setCurrentAudioPlaying(messageId);
       
       const ttsResponse = await callOpenAI('/v1/audio/speech', {
         model: 'tts-1',
         input: text,
         voice: settings.voiceGender === 'female' ? 'nova' : 'onyx',
-        speed: 1.0
+        speed: 0.9 // Chậm hơn để nghe rõ hơn
       });
       
       const audioBlob = await ttsResponse.blob();
@@ -338,18 +339,11 @@ Response MUST be 100% Korean!`
       
       audio.onended = () => {
         setCurrentAudioPlaying(null);
-        addDebugLog('✅ TTS ended');
-      };
-      
-      audio.onerror = (e) => {
-        addDebugLog(`❌ Audio error`);
-        setCurrentAudioPlaying(null);
       };
       
       await audio.play();
       
     } catch (error) {
-      addDebugLog(`❌ TTS error: ${error.message}`);
       setCurrentAudioPlaying(null);
     }
   };
@@ -384,10 +378,17 @@ Response MUST be 100% Korean!`
     }
   };
 
+  const toggleDetails = (messageId) => {
+    setExpandedDetails(prev => ({
+      ...prev,
+      [messageId]: !prev[messageId]
+    }));
+  };
+
   const testWithText = () => {
     const testText = prompt('Nhập câu tiếng Hàn:\n(VD: 안녕하세요)');
     if (testText) {
-      processUserInput(testText);
+      processUserInput(testText, 1.0);
     }
   };
 
@@ -425,25 +426,17 @@ Response MUST be 100% Korean!`
       
       {micPermission === 'granted' && (
         <>
-          <div style={{background: '#e8f5e9', padding: '10px', margin: '10px', borderRadius: '10px', border: '2px solid #4caf50'}}>
-            <strong>✅ Dùng OpenAI Whisper - Nhận diện CHÍNH XÁC!</strong>
-            <div style={{fontSize: '11px', marginTop: '5px'}}>
-              {debugLog.map((log, idx) => <div key={idx}>{log}</div>)}
-            </div>
-          </div>
-
           <div className="chat-container">
             {messages.length === 0 && (
               <div className="welcome-message">
-                <h2>환영합니다! Korean Learning App với Whisper AI</h2>
+                <h2>환영합니다! Chào mừng học tiếng Hàn</h2>
                 <p><strong>🎤 Cách sử dụng:</strong></p>
                 <ol style={{textAlign: 'left', maxWidth: '400px', margin: '10px auto', fontSize: '15px'}}>
                   <li>Nhấn giữ nút đỏ</li>
-                  <li>Nói TO và RÕ bằng tiếng Hàn (2-5 giây)</li>
+                  <li>Nói TO và RÕ (2-5 giây)</li>
                   <li>Thả nút</li>
-                  <li>Đợi Whisper xử lý (~3 giây)</li>
+                  <li>Xem kết quả + chi tiết</li>
                 </ol>
-                <p style={{fontSize: '14px', color: '#4caf50', fontWeight: 'bold'}}>💡 Whisper chính xác 95%+ - Không cần môi trường yên tĩnh!</p>
               </div>
             )}
             
@@ -460,11 +453,16 @@ Response MUST be 100% Korean!`
                         )}
                         <div className="corrected-text">
                           {message.correctedText}
+                          {message.confidence && (
+                            <span style={{fontSize: '12px', color: '#999', marginLeft: '10px'}}>
+                              ({(message.confidence * 100).toFixed(0)}% confident)
+                            </span>
+                          )}
                         </div>
                       </div>
                       
                       {!message.isCorrect && message.details && (
-                        <div className="details-section user-details">
+                        <div className="details-section user-details" style={{marginTop: '10px'}}>
                           <h4>📝 Chi tiết lỗi:</h4>
                           <p>{message.details}</p>
                         </div>
@@ -479,39 +477,100 @@ Response MUST be 100% Korean!`
                         {currentAudioPlaying === message.id && <span className="cursor">|</span>}
                       </div>
                       
-                      <button 
-                        onClick={() => replayAudio(message)} 
-                        className="btn-replay"
-                        disabled={currentAudioPlaying === message.id}
-                      >
-                        {currentAudioPlaying === message.id ? '▶️ Đang phát...' : '🔊 Nghe lại'}
-                      </button>
-                      
-                      <div className="details-section ai-details">
-                        <h4>📚 Chi tiết:</h4>
+                      <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
+                        <button 
+                          onClick={() => replayAudio(message)} 
+                          className="btn-replay"
+                          disabled={currentAudioPlaying === message.id}
+                          style={{flex: 1}}
+                        >
+                          {currentAudioPlaying === message.id ? '▶️ Đang phát...' : '🔊 Nghe lại'}
+                        </button>
                         
-                        {message.vocabulary && message.vocabulary.length > 0 && (
-                          <div className="vocabulary">
-                            <h5>Từ vựng:</h5>
-                            <ul>
-                              {message.vocabulary.map((item, idx) => (
-                                <li key={idx}>{item}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                        
-                        {message.grammar && message.grammar.length > 0 && (
-                          <div className="grammar">
-                            <h5>Ngữ pháp:</h5>
-                            <ul>
-                              {message.grammar.map((item, idx) => (
-                                <li key={idx}>{item}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
+                        <button 
+                          onClick={() => toggleDetails(message.id)}
+                          style={{
+                            flex: 1,
+                            background: expandedDetails[message.id] ? '#ff9800' : '#4caf50',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '25px',
+                            padding: '10px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          {expandedDetails[message.id] ? '🔼 Ẩn chi tiết' : '🔽 Xem chi tiết'}
+                        </button>
                       </div>
+                      
+                      {expandedDetails[message.id] && (
+                        <div className="details-section ai-details" style={{marginTop: '15px', background: '#f5f5f5', padding: '15px', borderRadius: '10px'}}>
+                          <h4>📚 Chi tiết học tập:</h4>
+                          
+                          {message.vocabulary && message.vocabulary.length > 0 && (
+                            <div className="vocabulary" style={{marginTop: '15px'}}>
+                              <h5 style={{color: '#2196f3', marginBottom: '10px'}}>📖 Từ vựng:</h5>
+                              {message.vocabulary.map((item, idx) => (
+                                <div key={idx} style={{
+                                  background: 'white',
+                                  padding: '12px',
+                                  marginBottom: '10px',
+                                  borderRadius: '8px',
+                                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                }}>
+                                  {typeof item === 'string' ? (
+                                    <p><strong>{item}</strong></p>
+                                  ) : (
+                                    <>
+                                      <p><strong style={{fontSize: '18px', color: '#1976d2'}}>{item.word}</strong></p>
+                                      <p><em style={{color: '#666'}}>{item.pronunciation || ''}</em></p>
+                                      <p style={{marginTop: '5px'}}>💡 {item.meaning}</p>
+                                      {item.example && <p style={{marginTop: '8px', color: '#555', fontStyle: 'italic'}}>📝 {item.example}</p>}
+                                    </>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          
+                          {message.grammar && message.grammar.length > 0 && (
+                            <div className="grammar" style={{marginTop: '15px'}}>
+                              <h5 style={{color: '#ff9800', marginBottom: '10px'}}>📐 Ngữ pháp:</h5>
+                              {message.grammar.map((item, idx) => (
+                                <div key={idx} style={{
+                                  background: 'white',
+                                  padding: '12px',
+                                  marginBottom: '10px',
+                                  borderRadius: '8px',
+                                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                }}>
+                                  {typeof item === 'string' ? (
+                                    <p><strong>{item}</strong></p>
+                                  ) : (
+                                    <>
+                                      <p><strong style={{fontSize: '16px', color: '#f57c00'}}>{item.pattern}</strong></p>
+                                      <p style={{marginTop: '8px'}}>📚 {item.explanation}</p>
+                                      {item.usage && <p style={{marginTop: '8px', color: '#666'}}>💡 Cách dùng: {item.usage}</p>}
+                                      {item.examples && item.examples.length > 0 && (
+                                        <div style={{marginTop: '10px'}}>
+                                          <p style={{fontWeight: 'bold', color: '#555'}}>📝 Ví dụ:</p>
+                                          {item.examples.map((ex, i) => (
+                                            <p key={i} style={{marginLeft: '15px', marginTop: '5px', fontStyle: 'italic', color: '#333'}}>
+                                              • {ex}
+                                            </p>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -521,7 +580,7 @@ Response MUST be 100% Korean!`
             {isProcessing && (
               <div className="processing">
                 <div className="spinner"></div>
-                <p>Đang xử lý với Whisper AI...</p>
+                <p>Đang xử lý...</p>
               </div>
             )}
           </div>
