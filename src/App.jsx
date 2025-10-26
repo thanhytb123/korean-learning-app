@@ -14,6 +14,8 @@ const KoreanLearningApp = () => {
   const [expandedDetails, setExpandedDetails] = useState({});
   const [textInput, setTextInput] = useState('');
   const [showSettings, setShowSettings] = useState(false);
+  const [recognizedText, setRecognizedText] = useState('');
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   
   const recognitionRef = useRef(null);
 
@@ -60,12 +62,14 @@ const KoreanLearningApp = () => {
     if (!recognitionRef.current || micPermission !== 'granted' || isProcessing || isRecording) return;
     
     setIsRecording(true);
+    setRecognizedText('');
     
     recognitionRef.current.onresult = (event) => {
       const transcript = event.results[0][0].transcript;
       if (transcript && transcript.trim()) {
         setIsRecording(false);
-        processUserInput(transcript);
+        setRecognizedText(transcript);
+        setShowConfirmDialog(true);
       }
     };
     
@@ -87,6 +91,16 @@ const KoreanLearningApp = () => {
     }
   };
 
+  const handleConfirmRecognition = (isQuestion) => {
+    let finalText = recognizedText;
+    if (isQuestion && !finalText.includes('?')) {
+      finalText = finalText + '?';
+    }
+    setShowConfirmDialog(false);
+    setRecognizedText('');
+    processUserInput(finalText);
+  };
+
   const handleTextSubmit = (e) => {
     e.preventDefault();
     if (textInput.trim() && !isProcessing) {
@@ -99,7 +113,6 @@ const KoreanLearningApp = () => {
     setIsProcessing(true);
     
     try {
-      // Build context for grammar check
       const recentContext = messages.slice(-2).map(m => 
         m.type === 'user' ? `User: ${m.correctedText}` : `AI: ${m.text}`
       ).join('\n');
@@ -109,23 +122,18 @@ const KoreanLearningApp = () => {
         messages: [
           {
             role: 'system',
-            content: `Korean teacher. Analyze sentence in context. Return DETAILED JSON:
+            content: `Korean teacher. Check grammar in context. Return ONLY valid JSON:
 {
-  "isCorrect": true/false,
+  "isCorrect": true,
   "corrected": "corrected sentence",
-  "details": "DETAILED Vietnamese explanation:
-  - Lỗi gì? (ngữ pháp, từ vựng, trật tự từ...)
-  - Tại sao sai?
-  - Câu đúng là gì?
-  - Giải thích chi tiết ngữ pháp/từ vựng
-  - Ví dụ tương tự"
+  "details": "Detailed Vietnamese explanation"
 }
 
-Be very detailed in Vietnamese explanation!`
+NO markdown, NO extra text, ONLY JSON.`
           },
           { 
             role: 'user', 
-            content: `Context:\n${recentContext || 'No previous context'}\n\nCheck this sentence: "${userText}"` 
+            content: `Context:\n${recentContext || 'No context'}\n\nCheck: "${userText}"` 
           }
         ],
         temperature: 0.2
@@ -135,8 +143,9 @@ Be very detailed in Vietnamese explanation!`
       let correction;
       
       try {
-        const content = correctionData.choices[0].message.content;
-        correction = JSON.parse(content.replace(/``````/g, '').trim());
+        let content = correctionData.choices[0].message.content;
+        content = content.replace(/``````/g, '').trim();
+        correction = JSON.parse(content);
       } catch (e) {
         correction = { isCorrect: true, corrected: userText, details: '' };
       }
@@ -145,21 +154,20 @@ Be very detailed in Vietnamese explanation!`
         id: Date.now(),
         type: 'user',
         originalText: userText,
-        correctedText: correction.isCorrect ? userText : correction.corrected,
-        isCorrect: correction.isCorrect,
-        details: correction.details
+        correctedText: correction.corrected || userText,
+        isCorrect: correction.isCorrect !== false,
+        details: correction.details || ''
       };
       
       setMessages(prev => [...prev, userMsg]);
       
-      if (!correction.isCorrect) {
+      if (!userMsg.isCorrect) {
         setIsProcessing(false);
         return;
       }
       
-      // Enhanced question detection
       const questionPatterns = ['?', 'ㅂ니까', '습니까', 'ㄹ까요', '을까요', '나요', '세요?', '어요?', '아요?', '지요?', '죠?', '니?', '지?', '요?'];
-      const isQuestion = questionPatterns.some(pattern => correction.corrected.includes(pattern));
+      const isQuestion = questionPatterns.some(pattern => userMsg.correctedText.includes(pattern));
       
       const recentMessages = messages.slice(-3).map(m => ({
         role: m.type === 'user' ? 'user' : 'assistant',
@@ -171,28 +179,26 @@ Be very detailed in Vietnamese explanation!`
         messages: [
           {
             role: 'system',
-            content: `Korean teacher. Natural conversation.
+            content: `Korean conversation teacher.
 
-CRITICAL RULES:
-1. Response 100% Korean
-2. Level: ${settings.userLevel.join(', ') || 'beginner'}
-3. DETECT TYPE:
-   - If user asks QUESTION (?, 나요, 어요?, etc): Answer the question directly
-   - If user makes STATEMENT: Continue conversation (comment or ask follow-up)
-4. Be natural and engaging
-
-Return JSON:
+CRITICAL: Return ONLY valid JSON, NO markdown:
 {
-  "response": "Korean response (answer question OR continue conversation)",
-  "vocabulary": [{"word": "단어", "meaning": "nghĩa tiếng Việt", "pronunciation": "phát âm", "example": "Ví dụ tiếng Hàn (Nghĩa tiếng Việt)"}],
-  "grammar": [{"pattern": "문법", "explanation": "Giải thích chi tiết tiếng Việt", "usage": "Cách dùng", "examples": ["VD1 (nghĩa)", "VD2 (nghĩa)"]}]
+  "response": "100% Korean response text",
+  "vocabulary": [{"word": "단어", "meaning": "nghĩa", "pronunciation": "phiên âm", "example": "VD (nghĩa)"}],
+  "grammar": [{"pattern": "문법", "explanation": "Giải thích tiếng Việt", "usage": "Cách dùng", "examples": ["VD1 (nghĩa)", "VD2"]}]
 }
-Include 4-5 vocab + 2-3 grammar.`
+
+Rules:
+- Response 100% Korean
+- If user asks QUESTION: Answer it
+- If user makes STATEMENT: Continue conversation
+- Level: ${settings.userLevel.join(', ') || 'beginner'}
+- Include 4-5 vocab + 2-3 grammar`
           },
           ...recentMessages,
           { 
             role: 'user', 
-            content: `${correction.corrected} ${isQuestion ? '[USER IS ASKING A QUESTION - ANSWER IT]' : '[USER MADE A STATEMENT - RESPOND NATURALLY]'}` 
+            content: `${userMsg.correctedText} ${isQuestion ? '[QUESTION - Answer it]' : '[STATEMENT - Respond naturally]'}` 
           }
         ],
         temperature: 0.7
@@ -202,8 +208,9 @@ Include 4-5 vocab + 2-3 grammar.`
       let aiResult;
       
       try {
-        const text = aiData.choices[0].message.content;
-        aiResult = JSON.parse(text.replace(/``````/g, '').trim());
+        let text = aiData.choices[0].message.content;
+        text = text.replace(/``````/g, '').trim();
+        aiResult = JSON.parse(text);
       } catch (e) {
         aiResult = {
           response: aiData.choices[0].message.content,
@@ -215,14 +222,14 @@ Include 4-5 vocab + 2-3 grammar.`
       const aiMsg = {
         id: Date.now() + 1,
         type: 'ai',
-        text: aiResult.response,
-        vocabulary: aiResult.vocabulary,
-        grammar: aiResult.grammar,
+        text: aiResult.response || 'Error',
+        vocabulary: aiResult.vocabulary || [],
+        grammar: aiResult.grammar || [],
         audioUrl: null
       };
       
       setMessages(prev => [...prev, aiMsg]);
-      playTTS(aiMsg.id, aiResult.response);
+      playTTS(aiMsg.id, aiMsg.text);
       
     } catch (error) {
       alert(`Lỗi: ${error.message}`);
@@ -320,6 +327,38 @@ Include 4-5 vocab + 2-3 grammar.`
           </button>
         </div>
       )}
+
+      {showConfirmDialog && (
+        <div style={{position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: '20px'}}>
+          <div style={{background: 'white', padding: '20px', borderRadius: '15px', maxWidth: '90%', width: '400px'}}>
+            <h3 style={{margin: '0 0 15px 0'}}>Xác nhận giọng nói</h3>
+            <div style={{background: '#f5f5f5', padding: '15px', borderRadius: '10px', marginBottom: '15px'}}>
+              <p style={{margin: 0, fontSize: '18px', fontWeight: 'bold', color: '#1976d2'}}>{recognizedText}</p>
+            </div>
+            <p style={{marginBottom: '15px', fontSize: '14px', color: '#666'}}>Đây là câu hỏi hay câu trần thuật?</p>
+            <div style={{display: 'flex', gap: '10px'}}>
+              <button
+                onClick={() => handleConfirmRecognition(true)}
+                style={{flex: 1, padding: '12px', background: '#2196f3', color: 'white', border: 'none', borderRadius: '8px', fontSize: '15px', fontWeight: 'bold', cursor: 'pointer'}}
+              >
+                ❓ Câu hỏi
+              </button>
+              <button
+                onClick={() => handleConfirmRecognition(false)}
+                style={{flex: 1, padding: '12px', background: '#4caf50', color: 'white', border: 'none', borderRadius: '8px', fontSize: '15px', fontWeight: 'bold', cursor: 'pointer'}}
+              >
+                💬 Câu nói
+              </button>
+            </div>
+            <button
+              onClick={() => {setShowConfirmDialog(false); setRecognizedText('');}}
+              style={{width: '100%', marginTop: '10px', padding: '10px', background: '#f44336', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer'}}
+            >
+              ❌ Hủy
+            </button>
+          </div>
+        </div>
+      )}
       
       <div className="chat-container" style={{paddingBottom: '160px'}}>
         {messages.length === 0 && (
@@ -347,17 +386,7 @@ Include 4-5 vocab + 2-3 grammar.`
                 {!msg.isCorrect && (
                   <button 
                     onClick={() => toggleDetails(msg.id)}
-                    style={{
-                      marginTop: '8px',
-                      padding: '8px 16px',
-                      background: expandedDetails[msg.id] ? '#ff9800' : '#2196f3',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '20px',
-                      cursor: 'pointer',
-                      fontSize: '13px',
-                      width: '100%'
-                    }}
+                    style={{marginTop: '8px', padding: '8px 16px', background: expandedDetails[msg.id] ? '#ff9800' : '#2196f3', color: 'white', border: 'none', borderRadius: '20px', cursor: 'pointer', fontSize: '13px', width: '100%'}}
                   >
                     {expandedDetails[msg.id] ? '🔼 Ẩn giải thích' : '📝 Xem giải thích chi tiết'}
                   </button>
@@ -400,7 +429,7 @@ Include 4-5 vocab + 2-3 grammar.`
                                     {v.pronunciation && <span style={{color: '#666', fontStyle: 'italic', marginLeft: '8px', fontSize: '13px'}}>[{v.pronunciation}]</span>}
                                   </p>
                                   <p style={{margin: '4px 0 0 0', fontSize: '14px', color: '#555'}}>💡 Nghĩa: {v.meaning}</p>
-                                  {v.example && <p style={{margin: '6px 0 0 0', fontSize: '13px', color: '#777', fontStyle: 'italic', paddingLeft: '10px', borderLeft: '2px solid #2196f3'}}>📝 Ví dụ: {v.example}</p>}
+                                  {v.example && <p style={{margin: '6px 0 0 0', fontSize: '13px', color: '#777', fontStyle: 'italic', paddingLeft: '10px', borderLeft: '2px solid #2196f3'}}>📝 {v.example}</p>}
                                 </>
                               )}
                             </div>
@@ -423,7 +452,7 @@ Include 4-5 vocab + 2-3 grammar.`
                                 {g.usage && <p style={{margin: '0 0 8px 0', color: '#666', fontSize: '14px'}}><strong>💡 Cách dùng:</strong> {g.usage}</p>}
                                 {g.examples && g.examples.length > 0 && (
                                   <div style={{marginTop: '8px', paddingLeft: '10px', borderLeft: '2px solid #ff9800'}}>
-                                    <p style={{fontWeight: 'bold', margin: '0 0 6px 0', fontSize: '14px'}}>📝 Ví dụ chi tiết:</p>
+                                    <p style={{fontWeight: 'bold', margin: '0 0 6px 0', fontSize: '14px'}}>📝 Ví dụ:</p>
                                     {g.examples.map((ex, j) => (
                                       <p key={j} style={{margin: '6px 0', fontSize: '13px', lineHeight: '1.5'}}>• {ex}</p>
                                     ))}
@@ -487,20 +516,7 @@ Include 4-5 vocab + 2-3 grammar.`
             onMouseUp={handleVoiceStop}
             onContextMenu={(e) => e.preventDefault()}
             disabled={isProcessing}
-            style={{
-              width: '100%',
-              padding: '15px',
-              background: isRecording ? '#f44336' : '#4caf50',
-              color: 'white',
-              border: 'none',
-              borderRadius: '25px',
-              cursor: isProcessing ? 'not-allowed' : 'pointer',
-              fontSize: '16px',
-              fontWeight: 'bold',
-              userSelect: 'none',
-              WebkitUserSelect: 'none',
-              WebkitTouchCallout: 'none'
-            }}
+            style={{width: '100%', padding: '15px', background: isRecording ? '#f44336' : '#4caf50', color: 'white', border: 'none', borderRadius: '25px', cursor: isProcessing ? 'not-allowed' : 'pointer', fontSize: '16px', fontWeight: 'bold', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none'}}
           >
             {isRecording ? '🎤 Đang ghi...' : '🎤 Nhấn giữ để nói'}
           </button>
