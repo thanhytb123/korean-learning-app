@@ -36,7 +36,6 @@ const KoreanLearningApp = () => {
       recognitionRef.current.lang = 'ko-KR';
       recognitionRef.current.continuous = false;
       recognitionRef.current.interimResults = false;
-      recognitionRef.current.maxAlternatives = 1;
     }
     
     return () => {
@@ -58,36 +57,20 @@ const KoreanLearningApp = () => {
 
   const handleVoiceStart = (e) => {
     e.preventDefault();
-    
-    if (!recognitionRef.current || micPermission !== 'granted' || isProcessing || isRecording) {
-      alert('Microphone không khả dụng. Vui lòng dùng ô nhập text!');
-      return;
-    }
+    if (!recognitionRef.current || micPermission !== 'granted' || isProcessing || isRecording) return;
     
     setIsRecording(true);
     
     recognitionRef.current.onresult = (event) => {
-      try {
-        const transcript = event.results[0][0].transcript;
-        if (transcript && transcript.trim()) {
-          setIsRecording(false);
-          processUserInput(transcript);
-        }
-      } catch (error) {
+      const transcript = event.results[0][0].transcript;
+      if (transcript && transcript.trim()) {
         setIsRecording(false);
+        processUserInput(transcript);
       }
     };
     
-    recognitionRef.current.onerror = (event) => {
-      setIsRecording(false);
-      if (event.error === 'no-speech') {
-        alert('Không nghe thấy! Hãy dùng ô nhập text.');
-      }
-    };
-    
-    recognitionRef.current.onend = () => {
-      setIsRecording(false);
-    };
+    recognitionRef.current.onerror = () => setIsRecording(false);
+    recognitionRef.current.onend = () => setIsRecording(false);
     
     try {
       recognitionRef.current.start();
@@ -99,9 +82,7 @@ const KoreanLearningApp = () => {
   const handleVoiceStop = (e) => {
     e.preventDefault();
     if (recognitionRef.current && isRecording) {
-      try {
-        recognitionRef.current.stop();
-      } catch (error) {}
+      try { recognitionRef.current.stop(); } catch (e) {}
       setIsRecording(false);
     }
   };
@@ -162,15 +143,37 @@ const KoreanLearningApp = () => {
         messages: [
           {
             role: 'system',
-            content: `Korean teacher. RULES:
-1. Response 100% Korean
-2. Level: ${settings.userLevel.join(', ') || 'beginner'}
-3. Return JSON:
+            content: `Korean teacher. CRITICAL RULES:
+
+1. Response MUST be 100% Korean (한국어)
+2. Student level: ${settings.userLevel.join(', ') || 'beginner'}
+3. Return ONLY this JSON format:
+
 {
-  "response": "Korean response",
-  "vocabulary": [{"word": "단어", "meaning": "nghĩa", "pronunciation": "phát âm", "example": "VD"}],
-  "grammar": [{"pattern": "문법", "explanation": "Giải thích", "usage": "Cách dùng", "examples": ["VD1", "VD2"]}]
-}`
+  "response": "Natural Korean response",
+  "vocabulary": [
+    {
+      "word": "Korean word",
+      "meaning": "Vietnamese meaning",
+      "pronunciation": "romanization",
+      "example": "Example sentence with this word in Korean with Vietnamese translation"
+    }
+  ],
+  "grammar": [
+    {
+      "pattern": "Grammar pattern (e.g., -아/어요)",
+      "explanation": "Detailed Vietnamese explanation of what this grammar does",
+      "usage": "When and how to use this pattern",
+      "examples": [
+        "Korean example 1 (Vietnamese translation)",
+        "Korean example 2 (Vietnamese translation)",
+        "Korean example 3 (Vietnamese translation)"
+      ]
+    }
+  ]
+}
+
+IMPORTANT: List ALL grammar patterns used in your response. Include 4-6 vocabulary words and 3-5 grammar patterns with detailed examples.`
           },
           { role: 'user', content: correction.corrected }
         ],
@@ -300,7 +303,7 @@ const KoreanLearningApp = () => {
         </div>
       )}
       
-      <div className="chat-container" style={{paddingBottom: '160px'}}>
+      <div className="chat-container" style={{paddingBottom: '160px', paddingLeft: '10px', paddingRight: '10px'}}>
         {messages.length === 0 && (
           <div style={{textAlign: 'center', padding: '20px'}}>
             <h2 style={{fontSize: '24px', marginBottom: '15px'}}>환영합니다!</h2>
@@ -310,9 +313,9 @@ const KoreanLearningApp = () => {
         )}
         
         {messages.map((msg) => (
-          <div key={msg.id} style={{marginBottom: '15px'}}>
+          <div key={msg.id} style={{marginBottom: '15px', width: '100%'}}>
             {msg.type === 'user' ? (
-              <div style={{background: msg.isCorrect ? '#e3f2fd' : '#ffebee', padding: '15px', borderRadius: '15px', marginLeft: '20px', marginRight: '60px'}}>
+              <div style={{background: msg.isCorrect ? '#e3f2fd' : '#ffebee', padding: '15px', borderRadius: '15px', maxWidth: '85%', marginLeft: 'auto'}}>
                 {!msg.isCorrect && (
                   <div style={{textDecoration: 'line-through', color: '#f44336', marginBottom: '8px'}}>
                     {msg.originalText}
@@ -328,7 +331,7 @@ const KoreanLearningApp = () => {
                 )}
               </div>
             ) : (
-              <div style={{background: '#f5f5f5', padding: '15px', borderRadius: '15px', marginRight: '20px', marginLeft: '60px'}}>
+              <div style={{background: '#f5f5f5', padding: '15px', borderRadius: '15px', maxWidth: '85%'}}>
                 <div style={{fontSize: '16px', fontWeight: '500', marginBottom: '10px'}}>{msg.text}</div>
                 
                 <div style={{display: 'flex', gap: '8px', marginTop: '12px'}}>
@@ -348,7 +351,7 @@ const KoreanLearningApp = () => {
                         <h5 style={{color: '#2196f3', margin: '0 0 10px 0', fontSize: '16px'}}>📖 Từ vựng</h5>
                         <div style={{background: '#f0f8ff', padding: '12px', borderRadius: '8px', borderLeft: '3px solid #2196f3'}}>
                           {msg.vocabulary.map((v, i) => (
-                            <div key={i} style={{marginBottom: i < msg.vocabulary.length - 1 ? '8px' : 0, paddingBottom: i < msg.vocabulary.length - 1 ? '8px' : 0, borderBottom: i < msg.vocabulary.length - 1 ? '1px solid #e0e0e0' : 'none'}}>
+                            <div key={i} style={{marginBottom: i < msg.vocabulary.length - 1 ? '12px' : 0, paddingBottom: i < msg.vocabulary.length - 1 ? '12px' : 0, borderBottom: i < msg.vocabulary.length - 1 ? '1px solid #e0e0e0' : 'none'}}>
                               {typeof v === 'string' ? (
                                 <p style={{margin: 0, fontSize: '14px'}}>{v}</p>
                               ) : (
@@ -357,8 +360,8 @@ const KoreanLearningApp = () => {
                                     <strong style={{color: '#1976d2'}}>{v.word}</strong>
                                     {v.pronunciation && <span style={{color: '#666', fontStyle: 'italic', marginLeft: '8px', fontSize: '13px'}}>[{v.pronunciation}]</span>}
                                   </p>
-                                  <p style={{margin: '4px 0 0 0', fontSize: '14px', color: '#555'}}>💡 {v.meaning}</p>
-                                  {v.example && <p style={{margin: '4px 0 0 0', fontSize: '13px', color: '#777', fontStyle: 'italic'}}>📝 {v.example}</p>}
+                                  <p style={{margin: '4px 0 0 0', fontSize: '14px', color: '#555'}}>💡 Nghĩa: {v.meaning}</p>
+                                  {v.example && <p style={{margin: '6px 0 0 0', fontSize: '13px', color: '#777', fontStyle: 'italic', paddingLeft: '10px', borderLeft: '2px solid #2196f3'}}>📝 Ví dụ: {v.example}</p>}
                                 </>
                               )}
                             </div>
@@ -369,21 +372,21 @@ const KoreanLearningApp = () => {
                     
                     {msg.grammar && msg.grammar.length > 0 && (
                       <div>
-                        <h5 style={{color: '#ff9800', margin: '0 0 10px 0', fontSize: '16px'}}>📐 Ngữ pháp</h5>
+                        <h5 style={{color: '#ff9800', margin: '0 0 10px 0', fontSize: '16px'}}>📐 Ngữ pháp ({msg.grammar.length} mẫu)</h5>
                         {msg.grammar.map((g, i) => (
-                          <div key={i} style={{background: '#fff8e1', padding: '12px', margin: '8px 0', borderRadius: '8px', borderLeft: '3px solid #ff9800'}}>
+                          <div key={i} style={{background: '#fff8e1', padding: '12px', margin: i > 0 ? '12px 0 0 0' : '0', borderRadius: '8px', borderLeft: '3px solid #ff9800'}}>
                             {typeof g === 'string' ? (
                               <p style={{margin: 0}}>{g}</p>
                             ) : (
                               <>
                                 <p style={{fontSize: '15px', fontWeight: 'bold', color: '#f57c00', margin: '0 0 8px 0'}}>{g.pattern}</p>
-                                <p style={{margin: '0 0 6px 0', fontSize: '14px'}}>📚 {g.explanation}</p>
-                                {g.usage && <p style={{margin: '0 0 8px 0', color: '#666', fontSize: '14px'}}>💡 {g.usage}</p>}
+                                <p style={{margin: '0 0 6px 0', fontSize: '14px'}}><strong>📚 Giải thích:</strong> {g.explanation}</p>
+                                {g.usage && <p style={{margin: '0 0 8px 0', color: '#666', fontSize: '14px'}}><strong>💡 Cách dùng:</strong> {g.usage}</p>}
                                 {g.examples && g.examples.length > 0 && (
                                   <div style={{marginTop: '8px', paddingLeft: '10px', borderLeft: '2px solid #ff9800'}}>
-                                    <p style={{fontWeight: 'bold', margin: '0 0 4px 0', fontSize: '13px'}}>📝 Ví dụ:</p>
+                                    <p style={{fontWeight: 'bold', margin: '0 0 6px 0', fontSize: '14px'}}>📝 Ví dụ chi tiết:</p>
                                     {g.examples.map((ex, j) => (
-                                      <p key={j} style={{margin: '3px 0', fontStyle: 'italic', fontSize: '13px'}}>• {ex}</p>
+                                      <p key={j} style={{margin: '6px 0', fontSize: '13px', lineHeight: '1.5'}}>• {ex}</p>
                                     ))}
                                   </div>
                                 )}
@@ -408,7 +411,7 @@ const KoreanLearningApp = () => {
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(0,0,0,0.7)',
+          background: 'rgba(255,255,255,0.95)',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -416,7 +419,7 @@ const KoreanLearningApp = () => {
           zIndex: 9999
         }}>
           <div className="spinner" style={{width: '60px', height: '60px', borderWidth: '6px'}}></div>
-          <p style={{marginTop: '20px', color: 'white', fontSize: '18px', fontWeight: 'bold'}}>Đang xử lý...</p>
+          <p style={{marginTop: '20px', color: '#333', fontSize: '18px', fontWeight: 'bold'}}>Đang xử lý...</p>
         </div>
       )}
       
@@ -427,7 +430,7 @@ const KoreanLearningApp = () => {
               type="text"
               value={textInput}
               onChange={(e) => setTextInput(e.target.value)}
-              placeholder="Nhập câu tiếng Hàn... (VD: 안녕하세요)"
+              placeholder="Nhập câu tiếng Hàn..."
               disabled={isProcessing || isRecording}
               style={{flex: 1, padding: '14px', fontSize: '16px', border: '2px solid #2196f3', borderRadius: '25px', outline: 'none'}}
             />
