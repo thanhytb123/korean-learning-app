@@ -303,7 +303,7 @@ IMPORTANT: List ALL grammar patterns used in your response. Include 4-6 vocabula
         </div>
       )}
       
-      <div className="chat-container" style={{paddingBottom: '160px', paddingLeft: '10px', paddingRight: '10px'}}>
+      <div className="chat-container" style={{paddingBottom: '160px'}}>
         {messages.length === 0 && (
           <div style={{textAlign: 'center', padding: '20px'}}>
             <h2 style={{fontSize: '24px', marginBottom: '15px'}}>환영합니다!</h2>
