@@ -11,10 +11,16 @@ const KoreanLearningApp = () => {
   });
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentAudioPlaying, setCurrentAudioPlaying] = useState(null);
+  const [debugLog, setDebugLog] = useState([]);
   
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const recognitionRef = useRef(null);
+
+  const addDebugLog = (message) => {
+    console.log(message);
+    setDebugLog(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`].slice(-10));
+  };
 
   const callOpenAI = async (endpoint, body, method = 'POST') => {
     const response = await fetch('/api/openai', {
@@ -45,15 +51,18 @@ const KoreanLearningApp = () => {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.getTracks().forEach(track => track.stop());
       setMicPermission('granted');
+      addDebugLog('✅ Microphone permission granted');
     } catch (error) {
       console.error('Microphone permission denied:', error);
       setMicPermission('denied');
+      addDebugLog('❌ Microphone permission denied');
     }
   };
 
   useEffect(() => {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       alert('Trình duyệt không hỗ trợ nhận diện giọng nói. Vui lòng dùng Chrome hoặc Edge.');
+      addDebugLog('❌ Speech Recognition not supported');
       return;
     }
     
@@ -62,6 +71,7 @@ const KoreanLearningApp = () => {
     recognitionRef.current.lang = 'ko-KR';
     recognitionRef.current.continuous = false;
     recognitionRef.current.interimResults = false;
+    addDebugLog('✅ Speech Recognition initialized');
     
     return () => {
       if (recognitionRef.current) {
@@ -76,6 +86,7 @@ const KoreanLearningApp = () => {
       return;
     }
     
+    addDebugLog('▶️ Recording started');
     setIsRecording(true);
     audioChunksRef.current = [];
     
@@ -88,12 +99,13 @@ const KoreanLearningApp = () => {
       };
       
       mediaRecorderRef.current.start();
+      addDebugLog('🎙️ MediaRecorder started');
       
       if (recognitionRef.current) {
-        // Gán event handlers TRƯỚC KHI start
         recognitionRef.current.onresult = async (event) => {
           const transcript = event.results[0][0].transcript;
-          console.log('Speech recognized:', transcript);
+          const confidence = event.results[0][0].confidence;
+          addDebugLog(`🎯 Recognized: "${transcript}" (confidence: ${confidence.toFixed(2)})`);
           
           if (transcript && transcript.trim().length > 0) {
             await processUserInput(transcript);
@@ -101,21 +113,32 @@ const KoreanLearningApp = () => {
         };
         
         recognitionRef.current.onerror = (event) => {
-          console.error('Speech recognition error:', event.error);
+          addDebugLog(`❌ Speech error: ${event.error}`);
           if (event.error !== 'no-speech') {
             alert(`Lỗi nhận diện: ${event.error}`);
           }
         };
         
         recognitionRef.current.onend = () => {
-          console.log('Speech recognition ended');
+          addDebugLog('⏹️ Speech recognition ended');
+        };
+        
+        recognitionRef.current.onstart = () => {
+          addDebugLog('🎤 Speech recognition started');
+        };
+        
+        recognitionRef.current.onspeechstart = () => {
+          addDebugLog('🗣️ Speech detected');
+        };
+        
+        recognitionRef.current.onspeechend = () => {
+          addDebugLog('🔇 Speech ended');
         };
         
         recognitionRef.current.start();
-        console.log('Speech recognition started');
       }
     } catch (error) {
-      console.error('Error starting recording:', error);
+      addDebugLog(`❌ Error: ${error.message}`);
       setIsRecording(false);
       alert(`Lỗi khởi động: ${error.message}`);
     }
@@ -124,7 +147,7 @@ const KoreanLearningApp = () => {
   const handleMouseUp = () => {
     if (!isRecording) return;
     
-    console.log('Stopping recording...');
+    addDebugLog('⏸️ Recording stopped');
     setIsRecording(false);
     
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
@@ -133,21 +156,20 @@ const KoreanLearningApp = () => {
       mediaRecorderRef.current.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+        addDebugLog(`📦 Audio blob size: ${audioBlob.size} bytes`);
         
         if (audioBlob.size < 1000) {
-          console.log('No speech detected');
-          return;
+          addDebugLog('⚠️ Audio too short, no speech detected');
         }
       };
     }
   };
 
   const processUserInput = async (userText) => {
+    addDebugLog(`🔄 Processing: "${userText}"`);
     setIsProcessing(true);
     
     try {
-      console.log('Processing input:', userText);
-      
       const correctionResponse = await callOpenAI('/v1/chat/completions', {
         model: 'gpt-4o-mini',
         messages: [
@@ -167,6 +189,7 @@ const KoreanLearningApp = () => {
         temperature: 0.3
       });
       
+      addDebugLog('✅ Got correction response');
       const correctionData = await correctionResponse.json();
       let correctionResult;
       
@@ -187,6 +210,7 @@ const KoreanLearningApp = () => {
       };
       
       setMessages(prev => [...prev, userMessage]);
+      addDebugLog(`📝 User message added (correct: ${correctionResult.isCorrect})`);
       
       if (!correctionResult.isCorrect) {
         setIsProcessing(false);
@@ -211,6 +235,7 @@ const KoreanLearningApp = () => {
         temperature: 0.7
       });
       
+      addDebugLog('✅ Got AI response');
       const aiData = await aiResponse.json();
       let aiResult;
       
@@ -235,10 +260,11 @@ const KoreanLearningApp = () => {
       };
       
       setMessages(prev => [...prev, aiMessage]);
+      addDebugLog('🤖 AI message added');
       await playTTS(aiMessage.id, aiResult.response);
       
     } catch (error) {
-      console.error('Error processing:', error);
+      addDebugLog(`❌ Processing error: ${error.message}`);
       alert(`Lỗi xử lý: ${error.message}`);
     } finally {
       setIsProcessing(false);
@@ -247,6 +273,7 @@ const KoreanLearningApp = () => {
 
   const playTTS = async (messageId, text) => {
     try {
+      addDebugLog('🔊 Playing TTS...');
       setCurrentAudioPlaying(messageId);
       
       const ttsResponse = await callOpenAI('/v1/audio/speech', {
@@ -271,17 +298,19 @@ const KoreanLearningApp = () => {
       
       audio.onended = () => {
         setCurrentAudioPlaying(null);
+        addDebugLog('✅ TTS playback ended');
       };
       
       audio.onerror = (e) => {
-        console.error('Audio playback error:', e);
+        addDebugLog(`❌ Audio error: ${e}`);
         setCurrentAudioPlaying(null);
       };
       
       await audio.play();
+      addDebugLog('▶️ TTS started');
       
     } catch (error) {
-      console.error('TTS Error:', error);
+      addDebugLog(`❌ TTS error: ${error.message}`);
       setCurrentAudioPlaying(null);
     }
   };
@@ -313,6 +342,14 @@ const KoreanLearningApp = () => {
       await audio.play();
     } else {
       await playTTS(message.id, message.text);
+    }
+  };
+
+  // NÚT TEST - Bypass Speech Recognition
+  const testWithText = () => {
+    const testText = prompt('Nhập câu tiếng Hàn để test:\n(VD: 안녕하세요)');
+    if (testText) {
+      processUserInput(testText);
     }
   };
 
@@ -350,11 +387,18 @@ const KoreanLearningApp = () => {
       
       {micPermission === 'granted' && (
         <>
+          {/* DEBUG LOG */}
+          <div style={{background: '#f0f0f0', padding: '10px', fontSize: '10px', maxHeight: '100px', overflow: 'auto', margin: '10px'}}>
+            <strong>Debug Log:</strong>
+            {debugLog.map((log, idx) => <div key={idx}>{log}</div>)}
+          </div>
+
           <div className="chat-container">
             {messages.length === 0 && (
               <div className="welcome-message">
                 <h2>환영합니다! Chào mừng bạn đến với ứng dụng học tiếng Hàn</h2>
                 <p>Nhấn giữ nút microphone để bắt đầu nói tiếng Hàn</p>
+                <p>Hoặc click nút "🧪 TEST" để test bằng text</p>
               </div>
             )}
             
@@ -438,6 +482,25 @@ const KoreanLearningApp = () => {
           </div>
           
           <div className="control-panel">
+            {/* NÚT TEST */}
+            <button
+              onClick={testWithText}
+              style={{
+                background: '#2196F3',
+                color: 'white',
+                padding: '15px 30px',
+                border: 'none',
+                borderRadius: '50px',
+                fontSize: '16px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                marginBottom: '10px',
+                width: '100%'
+              }}
+            >
+              🧪 TEST: Nhập text thay vì nói
+            </button>
+
             <button
               className={`btn-record ${isRecording ? 'recording' : ''}`}
               onMouseDown={handleMouseDown}
