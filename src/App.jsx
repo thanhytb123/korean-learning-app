@@ -30,7 +30,6 @@ const KoreanLearningApp = () => {
   useEffect(() => {
     requestMicrophonePermission();
     
-    // Initialize speech recognition
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       recognitionRef.current = new SpeechRecognition();
@@ -61,7 +60,7 @@ const KoreanLearningApp = () => {
     e.preventDefault();
     
     if (!recognitionRef.current || micPermission !== 'granted' || isProcessing || isRecording) {
-      alert('Microphone không khả dụng. Vui lòng dùng ô nhập text phía trên!');
+      alert('Microphone không khả dụng. Vui lòng dùng ô nhập text!');
       return;
     }
     
@@ -70,53 +69,39 @@ const KoreanLearningApp = () => {
     recognitionRef.current.onresult = (event) => {
       try {
         const transcript = event.results[0][0].transcript;
-        
         if (transcript && transcript.trim()) {
-          console.log('Recognized:', transcript);
           setIsRecording(false);
           processUserInput(transcript);
         }
       } catch (error) {
-        console.error('Result error:', error);
         setIsRecording(false);
       }
     };
     
     recognitionRef.current.onerror = (event) => {
-      console.error('Recognition error:', event.error);
       setIsRecording(false);
-      
       if (event.error === 'no-speech') {
-        alert('Không nghe thấy giọng nói!\n\nHãy dùng ô nhập text phía trên thay vì mic.');
-      } else if (event.error === 'not-allowed') {
-        alert('Quyền microphone bị từ chối!\n\nHãy dùng ô nhập text phía trên.');
+        alert('Không nghe thấy! Hãy dùng ô nhập text.');
       }
     };
     
     recognitionRef.current.onend = () => {
-      console.log('Recognition ended');
       setIsRecording(false);
     };
     
     try {
       recognitionRef.current.start();
-      console.log('Recognition started');
     } catch (error) {
-      console.error('Start error:', error);
       setIsRecording(false);
-      alert('Lỗi khởi động mic!\n\nHãy dùng ô nhập text phía trên.');
     }
   };
 
   const handleVoiceStop = (e) => {
     e.preventDefault();
-    
     if (recognitionRef.current && isRecording) {
       try {
         recognitionRef.current.stop();
-      } catch (error) {
-        console.error('Stop error:', error);
-      }
+      } catch (error) {}
       setIsRecording(false);
     }
   };
@@ -138,8 +123,8 @@ const KoreanLearningApp = () => {
         messages: [
           {
             role: 'system',
-            content: `Korean teacher. Check grammar strictly. Return JSON only:
-{"isCorrect": true/false, "corrected": "fixed sentence", "details": "Vietnamese explanation"}`
+            content: `Korean teacher. Check grammar. Return JSON:
+{"isCorrect": true/false, "corrected": "fixed", "details": "Vietnamese explanation"}`
           },
           { role: 'user', content: `Check: "${userText}"` }
         ],
@@ -177,32 +162,15 @@ const KoreanLearningApp = () => {
         messages: [
           {
             role: 'system',
-            content: `Korean learning assistant. STRICT RULES:
-1. Response MUST be 100% Korean (한국어) - NO Vietnamese, NO English
-2. Student level: ${settings.userLevel.join(', ') || 'beginner (초급)'}
-3. Return ONLY this JSON format:
-
+            content: `Korean teacher. RULES:
+1. Response 100% Korean
+2. Level: ${settings.userLevel.join(', ') || 'beginner'}
+3. Return JSON:
 {
-  "response": "Complete natural Korean response",
-  "vocabulary": [
-    {
-      "word": "Korean word",
-      "meaning": "Vietnamese meaning",
-      "pronunciation": "romanization",
-      "example": "Example sentence in Korean"
-    }
-  ],
-  "grammar": [
-    {
-      "pattern": "Grammar pattern in Korean",
-      "explanation": "Detailed Vietnamese explanation",
-      "usage": "How to use",
-      "examples": ["Example 1", "Example 2", "Example 3"]
-    }
-  ]
-}
-
-Be thorough and educational. Include 3-5 vocabulary words and 2-3 grammar points.`
+  "response": "Korean response",
+  "vocabulary": [{"word": "단어", "meaning": "nghĩa", "pronunciation": "phát âm", "example": "VD"}],
+  "grammar": [{"pattern": "문법", "explanation": "Giải thích", "usage": "Cách dùng", "examples": ["VD1", "VD2"]}]
+}`
           },
           { role: 'user', content: correction.corrected }
         ],
@@ -293,13 +261,7 @@ Be thorough and educational. Include 3-5 vocabulary words and 2-3 grammar points
         </div>
         <button 
           onClick={() => setShowSettings(!showSettings)}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'white',
-            fontSize: '24px',
-            cursor: 'pointer'
-          }}
+          style={{background: 'none', border: 'none', color: 'white', fontSize: '24px', cursor: 'pointer'}}
         >
           ⚙️
         </button>
@@ -342,109 +304,121 @@ Be thorough and educational. Include 3-5 vocabulary words and 2-3 grammar points
         {messages.length === 0 && (
           <div style={{textAlign: 'center', padding: '20px'}}>
             <h2 style={{fontSize: '24px', marginBottom: '15px'}}>환영합니다!</h2>
-            <p style={{fontSize: '16px', color: '#666'}}>Nhập câu tiếng Hàn bên dưới để học</p>
-            <p style={{fontSize: '14px', color: '#999', marginTop: '10px'}}>💡 VD: [translate:안녕하세요], [translate:감사합니다], [translate:잘 지냈어요?]</p>
+            <p style={{fontSize: '16px', color: '#666'}}>Nhập câu tiếng Hàn bên dưới</p>
+            <p style={{fontSize: '14px', color: '#999', marginTop: '10px'}}>💡 VD: 안녕하세요, 감사합니다</p>
           </div>
         )}
         
         {messages.map((msg) => (
-          <div key={msg.id} className={`message ${msg.type}`} style={{marginBottom: '15px'}}>
+          <div key={msg.id} style={{marginBottom: '15px'}}>
             {msg.type === 'user' ? (
-              <div className="user-message">
-                <div className="message-bubble" style={{background: msg.isCorrect ? '#e3f2fd' : '#ffebee', padding: '15px', borderRadius: '15px', marginLeft: '20px'}}>
-                  {!msg.isCorrect && (
-                    <div style={{textDecoration: 'line-through', color: '#f44336', marginBottom: '8px'}}>
-                      {msg.originalText}
-                    </div>
-                  )}
-                  <div style={{color: msg.isCorrect ? '#1976d2' : '#e91e63', fontWeight: 'bold', fontSize: '16px'}}>
-                    {msg.correctedText}
+              <div style={{background: msg.isCorrect ? '#e3f2fd' : '#ffebee', padding: '15px', borderRadius: '15px', marginLeft: '20px', marginRight: '60px'}}>
+                {!msg.isCorrect && (
+                  <div style={{textDecoration: 'line-through', color: '#f44336', marginBottom: '8px'}}>
+                    {msg.originalText}
                   </div>
-                  {!msg.isCorrect && msg.details && (
-                    <div style={{marginTop: '10px', fontSize: '14px', color: '#666', background: 'white', padding: '10px', borderRadius: '8px'}}>
-                      📝 {msg.details}
-                    </div>
-                  )}
+                )}
+                <div style={{color: msg.isCorrect ? '#1976d2' : '#e91e63', fontWeight: 'bold', fontSize: '16px'}}>
+                  {msg.correctedText}
                 </div>
+                {!msg.isCorrect && msg.details && (
+                  <div style={{marginTop: '10px', fontSize: '14px', color: '#666', background: 'white', padding: '10px', borderRadius: '8px'}}>
+                    📝 {msg.details}
+                  </div>
+                )}
               </div>
             ) : (
-              <div className="ai-message">
-                <div className="message-bubble" style={{background: '#f5f5f5', padding: '15px', borderRadius: '15px', marginRight: '20px'}}>
-                  <div style={{fontSize: '16px', fontWeight: '500', marginBottom: '10px'}}>{msg.text}</div>
+              <div style={{background: '#f5f5f5', padding: '15px', borderRadius: '15px', marginRight: '20px', marginLeft: '60px'}}>
+                <div style={{fontSize: '16px', fontWeight: '500', marginBottom: '10px'}}>{msg.text}</div>
+                
+                <div style={{display: 'flex', gap: '8px', marginTop: '12px'}}>
+                  <button onClick={() => replayAudio(msg)} disabled={currentAudioPlaying === msg.id} style={{flex: 1, background: currentAudioPlaying === msg.id ? '#999' : '#2196f3', color: 'white', border: 'none', borderRadius: '20px', padding: '10px', cursor: 'pointer', fontSize: '14px'}}>
+                    {currentAudioPlaying === msg.id ? '▶️' : '🔊'} Nghe
+                  </button>
                   
-                  <div style={{display: 'flex', gap: '8px', marginTop: '12px'}}>
-                    <button onClick={() => replayAudio(msg)} disabled={currentAudioPlaying === msg.id} style={{flex: 1, background: currentAudioPlaying === msg.id ? '#999' : '#2196f3', color: 'white', border: 'none', borderRadius: '20px', padding: '10px', cursor: 'pointer', fontSize: '14px'}}>
-                      {currentAudioPlaying === msg.id ? '▶️' : '🔊'} Nghe
-                    </button>
-                    
-                    <button onClick={() => toggleDetails(msg.id)} style={{flex: 1, background: expandedDetails[msg.id] ? '#ff9800' : '#4caf50', color: 'white', border: 'none', borderRadius: '20px', padding: '10px', cursor: 'pointer', fontSize: '14px'}}>
-                      {expandedDetails[msg.id] ? '🔼' : '📚'} Chi tiết
-                    </button>
-                  </div>
-                  
-                  {expandedDetails[msg.id] && (
-                    <div style={{marginTop: '15px', background: 'white', padding: '15px', borderRadius: '10px'}}>
-                      {msg.vocabulary && msg.vocabulary.length > 0 && (
-                        <div style={{marginBottom: '15px'}}>
-                          <h5 style={{color: '#2196f3', margin: '0 0 10px 0'}}>📖 Từ vựng</h5>
-                          {msg.vocabulary.map((v, i) => (
-                            <div key={i} style={{background: '#f9f9f9', padding: '10px', margin: '8px 0', borderRadius: '8px', borderLeft: '3px solid #2196f3'}}>
-                              {typeof v === 'string' ? (
-                                <p style={{margin: 0}}>{v}</p>
-                              ) : (
-                                <>
-                                  <p style={{fontSize: '16px', fontWeight: 'bold', color: '#1976d2', margin: '0 0 5px 0'}}>{v.word}</p>
-                                  {v.pronunciation && <p style={{color: '#666', fontStyle: 'italic', margin: '0 0 5px 0', fontSize: '14px'}}>[{v.pronunciation}]</p>}
-                                  <p style={{margin: '5px 0'}}>💡 {v.meaning}</p>
-                                  {v.example && <p style={{marginTop: '8px', color: '#555', fontSize: '14px', fontStyle: 'italic'}}>📝 {v.example}</p>}
-                                </>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      
-                      {msg.grammar && msg.grammar.length > 0 && (
-                        <div>
-                          <h5 style={{color: '#ff9800', margin: '0 0 10px 0'}}>📐 Ngữ pháp</h5>
-                          {msg.grammar.map((g, i) => (
-                            <div key={i} style={{background: '#fff8e1', padding: '10px', margin: '8px 0', borderRadius: '8px', borderLeft: '3px solid #ff9800'}}>
-                              {typeof g === 'string' ? (
-                                <p style={{margin: 0}}>{g}</p>
-                              ) : (
-                                <>
-                                  <p style={{fontSize: '16px', fontWeight: 'bold', color: '#f57c00', margin: '0 0 8px 0'}}>{g.pattern}</p>
-                                  <p style={{margin: '5px 0'}}>📚 {g.explanation}</p>
-                                  {g.usage && <p style={{marginTop: '8px', color: '#666', fontSize: '14px'}}>💡 {g.usage}</p>}
-                                  {g.examples && g.examples.length > 0 && (
-                                    <div style={{marginTop: '10px', paddingLeft: '10px', borderLeft: '2px solid #ff9800'}}>
-                                      <p style={{fontWeight: 'bold', margin: '0 0 5px 0', fontSize: '14px'}}>📝 Ví dụ:</p>
-                                      {g.examples.map((ex, j) => (
-                                        <p key={j} style={{margin: '5px 0', fontStyle: 'italic', fontSize: '14px'}}>• {ex}</p>
-                                      ))}
-                                    </div>
-                                  )}
-                                </>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  <button onClick={() => toggleDetails(msg.id)} style={{flex: 1, background: expandedDetails[msg.id] ? '#ff9800' : '#4caf50', color: 'white', border: 'none', borderRadius: '20px', padding: '10px', cursor: 'pointer', fontSize: '14px'}}>
+                    {expandedDetails[msg.id] ? '🔼' : '📚'} Chi tiết
+                  </button>
                 </div>
+                
+                {expandedDetails[msg.id] && (
+                  <div style={{marginTop: '15px', background: 'white', padding: '15px', borderRadius: '10px'}}>
+                    {msg.vocabulary && msg.vocabulary.length > 0 && (
+                      <div style={{marginBottom: '15px'}}>
+                        <h5 style={{color: '#2196f3', margin: '0 0 10px 0', fontSize: '16px'}}>📖 Từ vựng</h5>
+                        <div style={{background: '#f0f8ff', padding: '12px', borderRadius: '8px', borderLeft: '3px solid #2196f3'}}>
+                          {msg.vocabulary.map((v, i) => (
+                            <div key={i} style={{marginBottom: i < msg.vocabulary.length - 1 ? '8px' : 0, paddingBottom: i < msg.vocabulary.length - 1 ? '8px' : 0, borderBottom: i < msg.vocabulary.length - 1 ? '1px solid #e0e0e0' : 'none'}}>
+                              {typeof v === 'string' ? (
+                                <p style={{margin: 0, fontSize: '14px'}}>{v}</p>
+                              ) : (
+                                <>
+                                  <p style={{margin: 0, fontSize: '15px'}}>
+                                    <strong style={{color: '#1976d2'}}>{v.word}</strong>
+                                    {v.pronunciation && <span style={{color: '#666', fontStyle: 'italic', marginLeft: '8px', fontSize: '13px'}}>[{v.pronunciation}]</span>}
+                                  </p>
+                                  <p style={{margin: '4px 0 0 0', fontSize: '14px', color: '#555'}}>💡 {v.meaning}</p>
+                                  {v.example && <p style={{margin: '4px 0 0 0', fontSize: '13px', color: '#777', fontStyle: 'italic'}}>📝 {v.example}</p>}
+                                </>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {msg.grammar && msg.grammar.length > 0 && (
+                      <div>
+                        <h5 style={{color: '#ff9800', margin: '0 0 10px 0', fontSize: '16px'}}>📐 Ngữ pháp</h5>
+                        {msg.grammar.map((g, i) => (
+                          <div key={i} style={{background: '#fff8e1', padding: '12px', margin: '8px 0', borderRadius: '8px', borderLeft: '3px solid #ff9800'}}>
+                            {typeof g === 'string' ? (
+                              <p style={{margin: 0}}>{g}</p>
+                            ) : (
+                              <>
+                                <p style={{fontSize: '15px', fontWeight: 'bold', color: '#f57c00', margin: '0 0 8px 0'}}>{g.pattern}</p>
+                                <p style={{margin: '0 0 6px 0', fontSize: '14px'}}>📚 {g.explanation}</p>
+                                {g.usage && <p style={{margin: '0 0 8px 0', color: '#666', fontSize: '14px'}}>💡 {g.usage}</p>}
+                                {g.examples && g.examples.length > 0 && (
+                                  <div style={{marginTop: '8px', paddingLeft: '10px', borderLeft: '2px solid #ff9800'}}>
+                                    <p style={{fontWeight: 'bold', margin: '0 0 4px 0', fontSize: '13px'}}>📝 Ví dụ:</p>
+                                    {g.examples.map((ex, j) => (
+                                      <p key={j} style={{margin: '3px 0', fontStyle: 'italic', fontSize: '13px'}}>• {ex}</p>
+                                    ))}
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
         ))}
-        
-        {isProcessing && (
-          <div style={{textAlign: 'center', padding: '20px'}}>
-            <div className="spinner"></div>
-            <p style={{marginTop: '10px', color: '#666'}}>Đang xử lý...</p>
-          </div>
-        )}
       </div>
+      
+      {isProcessing && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.7)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999
+        }}>
+          <div className="spinner" style={{width: '60px', height: '60px', borderWidth: '6px'}}></div>
+          <p style={{marginTop: '20px', color: 'white', fontSize: '18px', fontWeight: 'bold'}}>Đang xử lý...</p>
+        </div>
+      )}
       
       <div style={{position: 'fixed', bottom: 0, left: 0, right: 0, background: 'white', padding: '12px', boxShadow: '0 -2px 10px rgba(0,0,0,0.1)', zIndex: 1000}}>
         <form onSubmit={handleTextSubmit} style={{marginBottom: '10px'}}>
@@ -490,7 +464,7 @@ Be thorough and educational. Include 3-5 vocabulary words and 2-3 grammar points
               WebkitTouchCallout: 'none'
             }}
           >
-            {isRecording ? '🎤 Đang ghi...' : '🎤 Nhấn giữ để nói (không ổn định)'}
+            {isRecording ? '🎤 Đang ghi...' : '🎤 Nhấn giữ để nói'}
           </button>
         )}
       </div>
