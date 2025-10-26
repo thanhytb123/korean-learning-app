@@ -138,48 +138,10 @@ const KoreanLearningApp = () => {
     }
   };
 
-  const isLikelyIncomplete = (text) => {
-    if (!text) return true;
-    const cleaned = text.replace(/[!?。！？]/g, '').trim();
-    const tokens = cleaned.split(/\s+/);
-    if (tokens.length === 1) {
-      const onlyHangul = /^[가-힣]+$/.test(tokens[0]);
-      if (onlyHangul) {
-        const predicateRE = /(요|요\?|다$|습니다|았|었|아요|어요|나요|죠|지요|겠다|겠다$|자$|세요|세요\?|니까|습니까|겠어요|습니다\?)/;
-        if (!predicateRE.test(tokens[0])) return true;
-      }
-    }
-
-    const hasPronoun = /(저|나는|저는|우리는|우린|제가)\b/.test(text);
-    const hasPredicate = /(다\b|요\b|어요|아요|습니다|았|었|겠다|겠|지요|죠|나요|세요|습니까|니까|다\?|요\?)/.test(text);
-    if (hasPronoun && !hasPredicate) return true;
-
-    if (!hasPredicate && tokens.length <= 4) {
-      return true;
-    }
-
-    return false;
-  };
-
   const processUserInput = async (userText) => {
     setIsProcessing(true);
     try {
       const original = userText.trim();
-
-      if (isLikelyIncomplete(original)) {
-        const suggested = await fallbackLocalCorrection(original);
-        const userMsg = {
-          id: Date.now(), type: 'user', originalText: original, correctedText: suggested.corrected, isCorrect: false, details: suggested.details
-        };
-        setMessages(prev => {
-          const next = [...prev, userMsg];
-          messagesRef.current = next;
-          return next;
-        });
-        setIsProcessing(false);
-        return;
-      }
-
       const recent = messagesRef.current.slice(-3).map(m => m.type === 'user' ? `User: ${m.correctedText}` : `AI: ${m.text}` ).join('\n') || 'First message';
 
       const correctionPayload = {
@@ -187,35 +149,75 @@ const KoreanLearningApp = () => {
         messages: [
           {
             role: 'system',
-            content: `Korean grammar checker with pronunciation error detection. Return JSON.
+            content: `You are an expert Korean grammar checker with context awareness. Return JSON.
 
-**PRONUNCIATION ERRORS** (common mistakes):
-- 밤/밥 (night/rice): "밤 먹었어요?" → Correct to "밥 먹었어요?"
-- 눈/는 (snow/topic marker): Check context
-- 밧/받 (rope/receive): Check context
-- Similar sounding words → Auto-correct based on context
+**CRITICAL RULES:**
 
-**GRAMMAR RULES:**
-✅ CORRECT: Has verb/predicate, subject omission OK
-❌ ERROR: Only noun/pronoun without predicate
+1. SUBJECT OMISSION = CORRECT (standard Korean):
+   ✅ "먹었어요?" = CORRECT (subject omitted, has verb)
+   ✅ "가자" = CORRECT (command)
+   ✅ "좋아" = CORRECT (predicate)
+   ✅ "공부했어요" = CORRECT (has verb)
 
-JSON format:
+2. PRONUNCIATION ERRORS = INCORRECT:
+   ❌ "밤 먹었어요?" → "밥 먹었어요?" (night vs rice)
+   ❌ "눈 와요" (context dependent)
+   
+3. INCOMPLETE = INCORRECT:
+   ❌ "밥" (just noun)
+   ❌ "저는" (just pronoun)
+   ❌ "한국어" (just noun)
+
+**ANALYSIS:**
+1. Has verb/adjective? → If YES + makes sense → CORRECT
+2. Pronunciation error (wrong word but has predicate)? → INCORRECT
+3. Incomplete (no predicate)? → INCORRECT
+4. Check context
+
+**JSON:**
 {
   "isCorrect": true/false,
-  "corrected": "corrected text (fix pronunciation errors)",
+  "corrected": "fixed text",
   "errorType": "pronunciation|incomplete|grammar|none",
-  "explanation": "Vietnamese explanation (ONLY if error)"
+  "explanation": "Vietnamese (if error)"
 }
 
-Example:
-Input: "밤 먹었어요?"
-Output: {"isCorrect": false, "corrected": "밥 먹었어요?", "errorType": "pronunciation", "explanation": "🔍 Phân tích lỗi:\\n- Câu của bạn: '밤 먹었어요?'\\n- Vấn đề: Bạn đã nhầm '밤' (đêm) thành '밥' (cơm).\\n\\n❌ Tại sao sai:\\nTrong ngữ cảnh ăn uống, '밥' (cơm) là từ đúng, không phải '밤' (đêm/ban đêm).\\n\\n✅ Câu đúng: '밥 먹었어요?'\\n- Giải thích: Hỏi 'Bạn đã ăn cơm chưa?'\\n\\n📝 Ví dụ:\\n1) 밥 먹었어요? (Bạn đã ăn cơm chưa?)\\n2) 저녁 먹었어요? (Bạn đã ăn tối chưa?)"}
+**EXPLANATION FORMAT:**
+🔍 Phân tích lỗi:
+- Câu của bạn: "[original]"
+- Vấn đề: [problem]
 
-Subject omission is CORRECT Korean grammar.`
+❌ Tại sao sai:
+[Vietnamese explanation]
+
+✅ Cách sửa:
+- Câu đúng: "[corrected]"
+- Giải thích: [how]
+
+📝 Ví dụ:
+1) [ex1]
+2) [ex2]
+3) [ex3]
+
+**EXAMPLES:**
+
+"먹었어요?" → {"isCorrect": true, "corrected": "먹었어요?", "errorType": "none"}
+
+"밤 먹었어요?" → {"isCorrect": false, "corrected": "밥 먹었어요?", "errorType": "pronunciation", "explanation": "🔍 Phân tích lỗi:\\n- Câu của bạn: '밤 먹었어요?'\\n- Vấn đề: Nhầm '밤' (đêm) với '밥' (cơm)\\n\\n❌ Tại sao sai:\\nNgữ cảnh ăn uống phải dùng '밥' (cơm).\\n\\n✅ Cách sửa:\\n- Câu đúng: '밥 먹었어요?'\\n- Giải thích: Hỏi 'Ăn cơm chưa?'\\n\\n📝 Ví dụ:\\n1) 밥 먹었어요? (Ăn cơm chưa?)\\n2) 밥 먹을래요? (Ăn cơm không?)\\n3) 아침 먹었어요? (Ăn sáng chưa?)"}
+
+"밥" → {"isCorrect": false, "corrected": "밥 먹었어요?", "errorType": "incomplete", "explanation": "🔍 Phân tích lỗi:\\n- Câu của bạn: '밥'\\n- Vấn đề: Chỉ có danh từ, thiếu động từ\\n\\n❌ Tại sao sai:\\nCâu cần động từ để hoàn chỉnh.\\n\\n✅ Cách sửa:\\n- Câu đúng: '밥 먹었어요?'\\n\\n📝 Ví dụ:\\n1) 밥 → 밥 먹었어요?\\n2) 물 → 물 마셨어요?\\n3) 한국어 → 한국어 공부해요"}
+
+"가자" → {"isCorrect": true, "corrected": "가자", "errorType": "none"}
+
+BE SMART. Context matters. Shorthand OK if meaningful.`
           },
-          { role: 'user', content: `Context: ${recent}\nAnalyze: "${original}"` }
+          {
+            role: 'user',
+            content: `Context: ${recent}\n\nSentence: "${original}"\n\nRemember: Subject omission CORRECT. Only error if: 1) Pronunciation, 2) No predicate, 3) Nonsensical.`
+          }
         ],
-        temperature: 0.1
+        temperature: 0.15,
+        max_tokens: 400
       };
 
       let correction = null;
@@ -226,7 +228,7 @@ Subject omission is CORRECT Korean grammar.`
         const match = corrText.match(/\{[\s\S]*\}/);
         correction = match ? JSON.parse(match[0]) : { isCorrect: true, corrected: original, errorType: 'none', explanation: '' };
       } catch (e) {
-        console.warn('Correction call failed, assuming correct', e);
+        console.warn('Correction failed, assuming correct', e);
         correction = { isCorrect: true, corrected: original, errorType: 'none', explanation: '' };
       }
 
@@ -268,14 +270,14 @@ Identify ALL patterns YOU use:
 - Particles: 을/를, 이/가, 에서, 에게, 한테
 - Example: "잘 지냈어요, 만나서 반가워요" → Grammar: ["-았/었어요", "-아/어서"]
 
-JSON (MANDATORY):
+JSON:
 {
   "response": "Korean with ,,",
   "vocabulary": [{"word":"word", "meaning":"Việt", "pronunciation":"roman", "example":"Korean (Việt)"}],
-  "grammar": [{"pattern":"EXACT pattern", "explanation":"Chức năng: Việt explanation", "usage":"Khi dùng: Việt", "examples":["Ex1 Korean (Việt)","Ex2 Korean (Việt)","Ex3 Korean (Việt)"]}]
+  "grammar": [{"pattern":"EXACT pattern", "explanation":"Chức năng: Việt", "usage":"Khi dùng: Việt", "examples":["Ex1 (Việt)","Ex2 (Việt)","Ex3 (Việt)"]}]
 }
 
-CRITICAL: Grammar array MUST have at least 2 items. Extract ONLY from YOUR response.`
+CRITICAL: Grammar MUST have 2+ items. Extract ONLY from YOUR response.`
           },
           ...messagesRef.current.slice(-6).map(m => ({ role: m.type === 'user' ? 'user' : 'assistant', content: m.type === 'user' ? m.correctedText : m.text })),
           { role: 'user', content: userMsg.correctedText }
@@ -299,21 +301,17 @@ CRITICAL: Grammar array MUST have at least 2 items. Extract ONLY from YOUR respo
           aiResult = { response: cleaned, vocabulary: [], grammar: [] };
         }
       } catch (e) {
-        console.error('Teacher call failed', e);
-        const fallback = '죄송합니다. 다시 말씀해 주세요.';
-        aiResult = { response: fallback, vocabulary: [], grammar: [] };
+        console.error('Teacher failed', e);
+        aiResult = { response: '죄송합니다. 다시 말씀해 주세요.', vocabulary: [], grammar: [] };
       }
-
-      const filteredVocab = aiResult.vocabulary || [];
-      const filteredGrammar = aiResult.grammar || [];
 
       const aiMsg = {
         id: Date.now() + 1,
         type: 'ai',
         text: aiResult.response || '죄송합니다.',
         displayText: (aiResult.response || '').replace(/,,/g, ',').replace(/\.\./g, '.'),
-        vocabulary: filteredVocab,
-        grammar: filteredGrammar,
+        vocabulary: aiResult.vocabulary || [],
+        grammar: aiResult.grammar || [],
         audioUrl: null
       };
 
@@ -326,32 +324,11 @@ CRITICAL: Grammar array MUST have at least 2 items. Extract ONLY from YOUR respo
       playTTS(aiMsg.id, aiMsg.text).catch(() => {});
 
     } catch (error) {
-      console.error('processUserInput error', error);
+      console.error('Error', error);
       alert(`Lỗi: ${error.message || error}`);
     } finally {
       setIsProcessing(false);
     }
-  };
-
-  const fallbackLocalCorrection = async (text) => {
-    const cleaned = text.replace(/[!?。！？]/g, '').trim();
-    const tokens = cleaned.split(/\s+/);
-    let corrected = text;
-    let explanation = '';
-
-    if (tokens.length === 1 && /^[가-힣]+$/.test(tokens[0])) {
-      corrected = `${tokens[0]}을/를 먹었어요?`;
-      explanation = `🔍 Phân tích lỗi:\n- Câu của bạn: "${text}"\n- Vấn đề: Câu chỉ có danh từ, thiếu vị ngữ (động từ/tính từ).\n\n❌ Tại sao sai:\nCâu tiếng Hàn cần có vị ngữ để hoàn chỉnh. Chỉ có danh từ không tạo thành câu có nghĩa.\n\n✅ Cách sửa:\n- Câu đúng: "${corrected}"\n- Giải thích: Thêm động từ hoặc tính từ để câu có nghĩa hoàn chỉnh.\n\n📝 Ví dụ:\n1) 밥 → 밥을 먹었어요? (Bạn đã ăn cơm chưa?)\n2) 한국어 → 한국어를 공부했어요. (Tôi đã học tiếng Hàn.)\n3) 물 → 물을 마셨어요. (Tôi đã uống nước.)`;
-      return { corrected, details: explanation };
-    }
-
-    if (/(저|나는|저는|제가)\b/.test(text) && !/(다\b|요\b|어요|아요|습니다)/.test(text)) {
-      corrected = `${text} 학생이에요`;
-      explanation = `🔍 Phân tích lỗi:\n- Câu của bạn: "${text}"\n- Vấn đề: Có đại từ chủ ngữ nhưng thiếu vị ngữ.\n\n❌ Tại sao sai:\nChủ ngữ tồn tại nhưng bạn không cung cấp hành động hay trạng thái nào.\n\n✅ Cách sửa:\n- Câu đúng: "${corrected}"\n- Giải thích: Thêm động từ/tính từ hoặc danh từ + 이다 để câu hoàn chỉnh.\n\n📝 Ví dụ:\n1) 저는 → 저는 학생이에요. (Tôi là học sinh.)\n2) 저는 → 저는 밥을 먹었어요. (Tôi đã ăn cơm.)\n3) 제가 → 제가 한국어를 공부해요. (Tôi học tiếng Hàn.)`;
-      return { corrected, details: explanation };
-    }
-
-    return { corrected: text, details: '' };
   };
 
   const playTTS = async (messageId, text) => {
