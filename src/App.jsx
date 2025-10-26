@@ -7,7 +7,7 @@ const KoreanLearningApp = () => {
   const [micPermission, setMicPermission] = useState(null);
   const [settings, setSettings] = useState({
     voiceGender: 'female',
-    userLevel: [],
+    ttsSpeed: 0.8,
   });
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentAudioPlaying, setCurrentAudioPlaying] = useState(null);
@@ -113,7 +113,7 @@ const KoreanLearningApp = () => {
     setIsProcessing(true);
     
     try {
-      const recentContext = messages.slice(-2).map(m => 
+      const recentContext = messages.slice(-3).map(m => 
         m.type === 'user' ? `User: ${m.correctedText}` : `AI: ${m.text}`
       ).join('\n');
       
@@ -198,27 +198,25 @@ Format explanation as:
         messages: [
           {
             role: 'system',
-            content: `Korean teacher. Return valid JSON with NATURAL punctuation:
+            content: `Korean teacher. Auto-detect student level from conversation history. Return valid JSON:
 
 {
-  "response": "Korean response WITH proper punctuation for natural TTS pauses",
+  "response": "Korean response WITH clear punctuation for TTS pauses",
   "vocabulary": [{"word": "단어", "meaning": "nghĩa", "pronunciation": "phát âm", "example": "VD (nghĩa)"}],
   "grammar": [{"pattern": "문법", "explanation": "Giải thích", "usage": "Cách dùng", "examples": ["VD1", "VD2"]}]
 }
 
-CRITICAL for TTS: Add punctuation for natural pauses
-- Use commas (,) for short pauses
+CRITICAL for natural TTS pauses:
+- Use commas (,) for SHORT pauses
+- Use double commas (,,) for LONGER pauses (will be displayed as single comma)
 - Use periods (.) for statement endings
 - Use exclamation (!) for emphasis
-- Use question marks (?) clearly
-
-Good example: "네, 맞아요! 저도 밥 먹었어요. 당신은요?"
-Bad example: "네 맞아요 저도 밥 먹었어요 당신은요"
+- Example: "네,, 맞아요! 저도 밥 먹었어요. 당신은요?"
 
 - Response 100% Korean with NATURAL punctuation
-- If QUESTION: Answer it clearly
+- Auto-detect student level from context (beginner/intermediate/advanced)
+- If QUESTION: Answer clearly
 - If STATEMENT: Continue conversation
-- Level: ${settings.userLevel.join(', ') || 'beginner'}
 - 4-6 vocab + 2-4 grammar with detailed examples`
           },
           ...recentMessages,
@@ -245,10 +243,12 @@ Bad example: "네 맞아요 저도 밥 먹었어요 당신은요"
         };
       }
       
+      const responseText = aiResult.response || 'Error';
       const aiMsg = {
         id: Date.now() + 1,
         type: 'ai',
-        text: aiResult.response || 'Error',
+        text: responseText,
+        displayText: responseText.replace(/,,/g, ',').replace(/\.\./g, '.'),
         vocabulary: aiResult.vocabulary || [],
         grammar: aiResult.grammar || [],
         audioUrl: null
@@ -272,7 +272,7 @@ Bad example: "네 맞아요 저도 밥 먹었어요 당신은요"
         model: 'tts-1',
         input: text,
         voice: settings.voiceGender === 'female' ? 'nova' : 'onyx',
-        speed: 0.8
+        speed: settings.ttsSpeed
       });
       
       const audioBlob = await ttsResponse.blob();
@@ -306,6 +306,13 @@ Bad example: "네 맞아요 저도 밥 먹었어요 당신은요"
     setExpandedDetails(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
+  const adjustSpeed = (delta) => {
+    setSettings(prev => ({
+      ...prev,
+      ttsSpeed: Math.max(0.5, Math.min(1.5, prev.ttsSpeed + delta))
+    }));
+  };
+
   return (
     <div className="korean-app">
       <header className="app-header">
@@ -323,33 +330,58 @@ Bad example: "네 맞아요 저도 밥 먹었어요 당신은요"
 
       {showSettings && (
         <div style={{background: 'white', padding: '20px', margin: '10px', borderRadius: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)'}}>
-          <h3>Cài đặt</h3>
-          <div style={{marginBottom: '15px'}}>
-            <label style={{display: 'block', marginBottom: '5px'}}>Giọng AI:</label>
+          <h3 style={{margin: '0 0 20px 0'}}>Cài đặt</h3>
+          
+          <div style={{marginBottom: '20px'}}>
+            <label style={{display: 'block', marginBottom: '8px', fontWeight: 'bold'}}>Giọng AI:</label>
             <select 
               value={settings.voiceGender} 
               onChange={(e) => setSettings({...settings, voiceGender: e.target.value})}
-              style={{padding: '8px', borderRadius: '5px', width: '100%'}}
+              style={{padding: '10px', borderRadius: '8px', width: '100%', fontSize: '15px', border: '1px solid #ddd'}}
             >
               <option value="female">여성 (Nữ)</option>
               <option value="male">남성 (Nam)</option>
             </select>
           </div>
+
           <div>
-            <label style={{display: 'block', marginBottom: '5px'}}>Trình độ:</label>
-            <input
-              type="text"
-              placeholder="VD: -이에요, -아요/어요"
-              value={settings.userLevel.join(', ')}
-              onChange={(e) => setSettings({...settings, userLevel: e.target.value.split(',').map(s => s.trim())})}
-              style={{padding: '8px', borderRadius: '5px', width: '100%', border: '1px solid #ddd'}}
-            />
+            <label style={{display: 'block', marginBottom: '8px', fontWeight: 'bold'}}>
+              Tốc độ đọc: {settings.ttsSpeed.toFixed(1)}x
+            </label>
+            <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
+              <button
+                onClick={() => adjustSpeed(-0.1)}
+                disabled={settings.ttsSpeed <= 0.5}
+                style={{padding: '10px 20px', background: settings.ttsSpeed <= 0.5 ? '#ccc' : '#f44336', color: 'white', border: 'none', borderRadius: '8px', cursor: settings.ttsSpeed <= 0.5 ? 'not-allowed' : 'pointer', fontSize: '18px', fontWeight: 'bold'}}
+              >
+                −
+              </button>
+              
+              <div style={{flex: 1, background: '#f5f5f5', padding: '15px', borderRadius: '8px', textAlign: 'center'}}>
+                <div style={{fontSize: '24px', fontWeight: 'bold', color: '#2196f3'}}>{settings.ttsSpeed.toFixed(1)}x</div>
+                <div style={{fontSize: '12px', color: '#666', marginTop: '4px'}}>
+                  {settings.ttsSpeed < 0.7 ? 'Rất chậm' : settings.ttsSpeed < 0.9 ? 'Chậm' : settings.ttsSpeed < 1.1 ? 'Bình thường' : settings.ttsSpeed < 1.3 ? 'Nhanh' : 'Rất nhanh'}
+                </div>
+              </div>
+              
+              <button
+                onClick={() => adjustSpeed(0.1)}
+                disabled={settings.ttsSpeed >= 1.5}
+                style={{padding: '10px 20px', background: settings.ttsSpeed >= 1.5 ? '#ccc' : '#4caf50', color: 'white', border: 'none', borderRadius: '8px', cursor: settings.ttsSpeed >= 1.5 ? 'not-allowed' : 'pointer', fontSize: '18px', fontWeight: 'bold'}}
+              >
+                +
+              </button>
+            </div>
+            <div style={{marginTop: '8px', fontSize: '13px', color: '#666', textAlign: 'center'}}>
+              0.5x (chậm nhất) → 1.5x (nhanh nhất)
+            </div>
           </div>
+
           <button
             onClick={() => setShowSettings(false)}
-            style={{marginTop: '15px', padding: '10px 20px', background: '#4caf50', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', width: '100%'}}
+            style={{marginTop: '20px', padding: '12px 20px', background: '#2196f3', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', width: '100%', fontSize: '16px', fontWeight: 'bold'}}
           >
-            Đóng
+            ✓ Đóng
           </button>
         </div>
       )}
@@ -426,7 +458,7 @@ Bad example: "네 맞아요 저도 밥 먹었어요 당신은요"
               </div>
             ) : (
               <div style={{background: '#f5f5f5', padding: '15px', borderRadius: '15px', display: 'inline-block', maxWidth: '85%'}}>
-                <div style={{fontSize: '16px', fontWeight: '500', marginBottom: '10px'}}>{msg.text}</div>
+                <div style={{fontSize: '16px', fontWeight: '500', marginBottom: '10px'}}>{msg.displayText || msg.text}</div>
                 
                 <div style={{display: 'flex', gap: '8px', marginTop: '12px'}}>
                   <button onClick={() => replayAudio(msg)} disabled={currentAudioPlaying === msg.id} style={{flex: 1, background: currentAudioPlaying === msg.id ? '#999' : '#2196f3', color: 'white', border: 'none', borderRadius: '20px', padding: '10px', cursor: 'pointer', fontSize: '14px'}}>
