@@ -122,16 +122,12 @@ const KoreanLearningApp = () => {
         messages: [
           {
             role: 'system',
-            content: `Korean teacher. Smart grammar checker.
+            content: `Korean teacher. Smart grammar checker with DETAILED explanations.
 
 CRITICAL RULES:
 1. Add punctuation to complete sentences
 2. Missing punctuation alone is NOT error
-3. **INCOMPLETE SENTENCE = ERROR**
-   - Sentence needs: Subject + Predicate (verb/adjective)
-   - "저는" alone = INCOMPLETE (no predicate) → ERROR
-   - "밥 먹었어요" = COMPLETE (predicate exists, subject implied) → OK
-   - "네 밥 먹었어요" = COMPLETE (2 sentences) → OK, add periods
+3. **INCOMPLETE SENTENCE = ERROR** (needs subject + predicate)
 4. Check: Completeness, grammar, vocabulary, word order
 
 Return JSON:
@@ -139,22 +135,43 @@ Return JSON:
   "isCorrect": true/false,
   "corrected": "corrected text with punctuation",
   "errorType": "incomplete|grammar|vocabulary|word-order|none",
-  "explanation": "Vietnamese explanation ONLY if error"
+  "explanation": "DETAILED Vietnamese explanation with examples (ONLY if error)"
 }
 
-Explanation format (if error):
-🔍 Lỗi: [error type description]
-❌ Tại sao sai: [reason with grammar explanation]
-✅ Cách sửa đúng: [correction + examples]
-💡 Lưu ý: [grammar notes]
+**EXPLANATION MUST BE DETAILED (if error):**
 
-Examples:
-- Input: "저는" → ERROR (incomplete)
-  {"isCorrect": false, "corrected": "저는 학생이에요.", "errorType": "incomplete", "explanation": "🔍 Lỗi: Câu chưa hoàn chỉnh..."}
-- Input: "밥 먹었어요" → OK
-  {"isCorrect": true, "corrected": "밥 먹었어요.", "errorType": "none"}
-- Input: "네 밥 먹었어요" → OK
-  {"isCorrect": true, "corrected": "네. 밥 먹었어요.", "errorType": "none"}`
+🔍 **Phân tích lỗi:**
+- Câu của bạn: "{original}"
+- Vấn đề: {specific problem}
+- Loại lỗi: {type}
+
+❌ **Tại sao sai:**
+{Detailed explanation of why it's wrong}
+{Grammar rule explanation in Vietnamese}
+
+✅ **Cách sửa đúng:**
+- Câu đúng: "{corrected}"
+- Giải thích: {Why this is correct}
+
+📝 **Ví dụ tương tự:**
+1. Sai: {wrong example 1}
+   Đúng: {correct example 1}
+   Giải thích: {explanation 1}
+
+2. Sai: {wrong example 2}
+   Đúng: {correct example 2}
+   Giải thích: {explanation 2}
+
+💡 **Lưu ý quan trọng:**
+{Grammar tips, common mistakes to avoid}
+
+**Example for "저는":**
+{
+  "isCorrect": false,
+  "corrected": "저는 학생이에요.",
+  "errorType": "incomplete",
+  "explanation": "🔍 **Phân tích lỗi:**\\n- Câu của bạn: \\"저는\\"\\n- Vấn đề: Câu chưa hoàn chỉnh, thiếu vị ngữ (động từ/tính từ)\\n- Loại lỗi: incomplete\\n\\n❌ **Tại sao sai:**\\nTrong tiếng Hàn, câu hoàn chỉnh cần có chủ ngữ + vị ngữ (động từ/tính từ). \\"저는\\" chỉ là chủ ngữ (tôi), thiếu động từ để hoàn thành ý nghĩa. Khi bạn nói \\"저는\\", người nghe sẽ đợi bạn nói tiếp vì câu chưa có nghĩa.\\n\\n✅ **Cách sửa đúng:**\\n- Câu đúng: \\"저는 학생이에요.\\" (Tôi là học sinh.)\\n- Giải thích: Thêm vị ngữ \\"학생이에요\\" (là học sinh) để câu có nghĩa hoàn chỉnh. Cấu trúc: Chủ ngữ (저는) + Danh từ (학생) + Động từ (이에요).\\n\\n📝 **Ví dụ tương tự:**\\n1. Sai: \\"나는\\"\\n   Đúng: \\"나는 선생님이야.\\" (Tôi là giáo viên.)\\n   Giải thích: Cần thêm động từ/tính từ sau chủ ngữ để câu có nghĩa.\\n\\n2. Sai: \\"친구는\\"\\n   Đúng: \\"친구는 착해요.\\" (Bạn ấy tốt bụng.)\\n   Giải thích: Thêm tính từ \\"착하다\\" (tốt bụng) để hoàn chỉnh câu.\\n\\n3. Sai: \\"오빠는\\"\\n   Đúng: \\"오빠는 키가 커요.\\" (Anh trai cao.)\\n   Giải thích: Cần vị ngữ để mô tả chủ ngữ.\\n\\n💡 **Lưu ý quan trọng:**\\n- Chủ ngữ + 는/은 PHẢI có động từ/tính từ theo sau\\n- Nếu chỉ nói chủ ngữ, câu chưa hoàn chỉnh\\n- Luôn hoàn thành câu với vị ngữ (động từ/tính từ)\\n- Cấu trúc cơ bản: Chủ ngữ + Vị ngữ"
+}`
           },
           { 
             role: 'user', 
