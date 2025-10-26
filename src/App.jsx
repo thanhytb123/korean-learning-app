@@ -198,26 +198,33 @@ Format explanation as:
         messages: [
           {
             role: 'system',
-            content: `Korean teacher. Auto-detect student level from conversation history. Return valid JSON:
+            content: `Korean teacher. Auto-detect student level. Return valid JSON:
 
 {
   "response": "Korean response WITH clear punctuation for TTS pauses",
-  "vocabulary": [{"word": "단어", "meaning": "nghĩa", "pronunciation": "phát âm", "example": "VD (nghĩa)"}],
-  "grammar": [{"pattern": "문법", "explanation": "Giải thích", "usage": "Cách dùng", "examples": ["VD1", "VD2"]}]
+  "vocabulary": [{"word": "từ", "meaning": "nghĩa tiếng Việt", "pronunciation": "phát âm", "example": "Câu ví dụ (Nghĩa tiếng Việt)"}],
+  "grammar": [{"pattern": "mẫu ngữ pháp", "explanation": "Giải thích chi tiết tiếng Việt", "usage": "Khi nào dùng, cách dùng", "examples": ["VD1 (nghĩa)", "VD2 (nghĩa)"]}]
 }
 
-CRITICAL for natural TTS pauses:
-- Use commas (,) for SHORT pauses
-- Use double commas (,,) for LONGER pauses (will be displayed as single comma)
-- Use periods (.) for statement endings
-- Use exclamation (!) for emphasis
-- Example: "네,, 맞아요! 저도 밥 먹었어요. 당신은요?"
+CRITICAL RULES:
+1. TTS pauses: Use commas (,) for short, double commas (,,) for longer pauses
+2. **VOCABULARY: Extract ONLY words/phrases FROM your response sentence**
+   - If response: "네,, 맞아요! 저도 밥 먹었어요."
+   - Good vocab: 맞다 (đúng), 저 (tôi), 밥 (cơm), 먹다 (ăn)
+   - Bad: Don't add extra words not in your response
+3. **GRAMMAR: Extract ONLY patterns ACTUALLY USED IN your response**
+   - If response: "네,, 맞아요! 저도 밥 먹었어요."
+   - Good grammar: -아요/어요 (ending), -도 (also), -었- (past)
+   - Bad: Don't add patterns not in your response
+4. Each vocabulary/grammar MUST have:
+   - Detailed Vietnamese explanation
+   - Real examples with meanings
+5. Auto-detect student level from conversation context
 
-- Response 100% Korean with NATURAL punctuation
-- Auto-detect student level from context (beginner/intermediate/advanced)
+- Response 100% Korean with natural punctuation
 - If QUESTION: Answer clearly
 - If STATEMENT: Continue conversation
-- 4-6 vocab + 2-4 grammar with detailed examples`
+- 3-5 vocab ONLY from response + 2-3 grammar ONLY from response`
           },
           ...recentMessages,
           { 
@@ -474,7 +481,7 @@ CRITICAL for natural TTS pauses:
                   <div style={{marginTop: '15px', background: 'white', padding: '15px', borderRadius: '10px'}}>
                     {msg.vocabulary && msg.vocabulary.length > 0 && (
                       <div style={{marginBottom: '15px'}}>
-                        <h5 style={{color: '#2196f3', margin: '0 0 10px 0', fontSize: '16px'}}>📖 Từ vựng</h5>
+                        <h5 style={{color: '#2196f3', margin: '0 0 10px 0', fontSize: '16px'}}>📖 Từ vựng (trong câu trả lời)</h5>
                         <div style={{background: '#f0f8ff', padding: '12px', borderRadius: '8px', borderLeft: '3px solid #2196f3'}}>
                           {msg.vocabulary.map((v, i) => (
                             <div key={i} style={{marginBottom: i < msg.vocabulary.length - 1 ? '12px' : 0, paddingBottom: i < msg.vocabulary.length - 1 ? '12px' : 0, borderBottom: i < msg.vocabulary.length - 1 ? '1px solid #e0e0e0' : 'none'}}>
@@ -498,7 +505,7 @@ CRITICAL for natural TTS pauses:
                     
                     {msg.grammar && msg.grammar.length > 0 && (
                       <div>
-                        <h5 style={{color: '#ff9800', margin: '0 0 10px 0', fontSize: '16px'}}>📐 Ngữ pháp ({msg.grammar.length} mẫu)</h5>
+                        <h5 style={{color: '#ff9800', margin: '0 0 10px 0', fontSize: '16px'}}>📐 Ngữ pháp (trong câu trả lời)</h5>
                         {msg.grammar.map((g, i) => (
                           <div key={i} style={{background: '#fff8e1', padding: '12px', margin: i > 0 ? '12px 0 0 0' : '0', borderRadius: '8px', borderLeft: '3px solid #ff9800'}}>
                             {typeof g === 'string' ? (
