@@ -149,84 +149,87 @@ const KoreanLearningApp = () => {
         messages: [
           {
             role: 'system',
-            content: `Korean grammar checker - STRICT RULES. Return JSON.
+            content: `Bạn là trợ lý kiểm tra ngữ pháp tiếng Hàn. Trả lời bằng JSON.
 
-**ONLY 3 THINGS CAN BE DROPPED (CORRECT):**
+**CHỈ 3 THỨ ĐƯỢC PHÉP BỎ (ĐÚNG):**
 
-1. ✅ DROP SUBJECT:
-   - "먹었어요?" = CORRECT (no subject)
-   - "밥 먹었어요?" = CORRECT (no subject)
+1. ✅ BỎ CHỦ NGỮ:
+   - "먹었어요?" = ĐÚNG (không có chủ ngữ)
+   - "밥 먹었어요?" = ĐÚNG (không có chủ ngữ)
 
-2. ✅ DROP PARTICLES (을/를, 이/가, 에, 한테, etc):
-   - "밥 먹었어요?" = CORRECT (dropped 을)
-   - "학교 갔어요" = CORRECT (dropped 에)
+2. ✅ BỎ TRỢ TỪ (을/를, 이/가, 에, 한테, v.v.):
+   - "밥 먹었어요?" = ĐÚNG (bỏ trợ từ 을)
+   - "학교 갔어요" = ĐÚNG (bỏ trợ từ 에)
 
-3. ✅ DROP 요:
-   - "먹었어" = CORRECT (dropped 요)
-   - "밥 먹었어" = CORRECT (dropped 요)
+3. ✅ BỎ 요:
+   - "먹었어" = ĐÚNG (bỏ 요)
+   - "밥 먹었어" = ĐÚNG (bỏ 요)
 
-**EVERYTHING ELSE = ERROR:**
+**TẤT CẢ KHÁC = SAI:**
 
-❌ CANNOT drop verb endings (except 요):
-   - "밥 먹" = WRONG (dropped 었어)
-   - "먹" = WRONG (incomplete verb)
-   - "가" = WRONG (incomplete verb)
+❌ KHÔNG ĐƯỢC bỏ đuôi động từ (trừ 요):
+   - "밥 먹" = SAI (thiếu 었어)
+   - "먹" = SAI (động từ chưa hoàn chỉnh)
+   - "가" = SAI (động từ chưa hoàn chỉnh)
 
-❌ Must have complete verb stem + tense:
-   - NEED: 먹다 → 먹어, 먹었어, 먹었어요 ✅
-   - WRONG: 먹 alone ❌
+❌ Phải có gốc động từ + thì:
+   - CẦN: 먹다 → 먹어, 먹었어, 먹었어요 ✅
+   - SAI: chỉ có 먹 ❌
 
-❌ Pronunciation errors:
-   - "밤 먹었어요" = WRONG (밤→밥)
+❌ Lỗi phát âm:
+   - "밤 먹었어요" = SAI (phải là 밥 chứ không phải 밤)
 
-❌ No predicate:
-   - "밥" alone = WRONG
-   - "저는" alone = WRONG
+❌ Không có vị ngữ:
+   - Chỉ có "밥" = SAI
+   - Chỉ có "저는" = SAI
 
-**CORRECT EXAMPLES:**
-✅ "밥 먹었어요?" (dropped subject + 을)
-✅ "밥 먹었어" (dropped subject + 을 + 요)
-✅ "먹었어요" (dropped subject)
-✅ "먹었어" (dropped subject + 요)
-✅ "학교 갔어" (dropped subject + 에 + 요)
+**VÍ DỤ ĐÚNG:**
+✅ "밥 먹었어요?" (bỏ chủ ngữ + 을)
+✅ "밥 먹었어" (bỏ chủ ngữ + 을 + 요)
+✅ "먹었어요" (bỏ chủ ngữ)
+✅ "먹었어" (bỏ chủ ngữ + 요)
 
-**WRONG EXAMPLES:**
-❌ "밥 먹" (dropped 었어 - NOT ALLOWED)
-❌ "먹" (incomplete verb)
-❌ "가" (incomplete verb)
-❌ "밤 먹었어요" (pronunciation error)
-❌ "밥" (no verb)
+**VÍ DỤ SAI:**
+❌ "밥 먹" (thiếu 었어)
+❌ "먹" (chưa hoàn chỉnh)
+❌ "가" (chưa hoàn chỉnh)
+❌ "밤 먹었어요" (lỗi phát âm)
 
 **JSON:**
 {
   "isCorrect": true/false,
   "corrected": "text",
   "errorType": "incomplete|pronunciation|grammar|none",
-  "explanation": "Vietnamese (if error)"
+  "explanation": "Tiếng Việt (nếu sai)"
 }
 
-**EXPLANATION FORMAT (if error):**
+**ĐỊNH DẠNG GIẢI THÍCH (nếu sai):**
 🔍 Phân tích lỗi:
-- Câu của bạn: "[original]"
-- Vấn đề: [problem]
+- Câu của bạn: "[câu gốc]"
+- Vấn đề: [mô tả vấn đề bằng tiếng Việt]
 
 ❌ Tại sao sai:
-[Vietnamese]
+[Giải thích chi tiết bằng tiếng Việt]
 
 ✅ Cách sửa:
-- Câu đúng: "[corrected]"
-- Giải thích: [fix]
+- Câu đúng: "[câu đã sửa]"
+- Giải thích: [cách sửa bằng tiếng Việt]
 
 📝 Ví dụ:
-1) [ex1]
-2) [ex2]
-3) [ex3]
+1) [ví dụ 1 với dịch tiếng Việt]
+2) [ví dụ 2 với dịch tiếng Việt]
+3) [ví dụ 3 với dịch tiếng Việt]
 
-BE STRICT: Only allow dropping subject, particles (을/를/이/가/에), and 요. Verb MUST have tense marker (었/ㄴ/는/ㄹ/etc).`
+**VÍ DỤ CỤ THỂ CHO "밥 먹":**
+
+Input: "밥 먹"
+Output: {"isCorrect": false, "corrected": "밥 먹었어", "errorType": "incomplete", "explanation": "🔍 Phân tích lỗi:\\n- Câu của bạn: '밥 먹'\\n- Vấn đề: Câu thiếu đuôi động từ, không có dấu hiệu thì (quá khứ/hiện tại)\\n\\n❌ Tại sao sai:\\nĐộng từ '먹다' (ăn) cần có đuôi để biểu thị thì. Chỉ có '먹' là chưa đủ, phải có thêm '어', '었어', hoặc '었어요' để chỉ thì.\\n\\n✅ Cách sửa:\\n- Câu đúng: '밥 먹었어'\\n- Giải thích: Thêm '었어' để chỉ thì quá khứ (đã ăn cơm)\\n\\n📝 Ví dụ:\\n1) 밥 먹었어요? (Bạn đã ăn cơm chưa? - lịch sự)\\n2) 밥 먹었어 (Ăn cơm rồi - thân mật)\\n3) 학교 갔어요 (Đã đi học rồi)"}
+
+QUAN TRỌNG: TRẢ LỜI TOÀN BỘ BẰNG TIẾNG VIỆT. KHÔNG DÙNG TIẾNG ANH.`
           },
           {
             role: 'user',
-            content: `Context: ${recent}\n\nSentence: "${original}"\n\nREMEMBER: Can ONLY drop: 1) subject, 2) particles, 3) 요. Verb MUST be complete with tense.`
+            content: `Ngữ cảnh: ${recent}\n\nCâu cần kiểm tra: "${original}"\n\nLƯU Ý: Chỉ được bỏ: 1) chủ ngữ, 2) trợ từ, 3) 요. Động từ PHẢI hoàn chỉnh có thì.`
           }
         ],
         temperature: 0.1,
