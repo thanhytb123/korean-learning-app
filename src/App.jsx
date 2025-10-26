@@ -138,12 +138,9 @@ const KoreanLearningApp = () => {
         return;
       }
       
-      const isQuestion = correction.corrected.includes('?') || 
-                        correction.corrected.includes('ㅂ니까') || 
-                        correction.corrected.includes('어요?') ||
-                        correction.corrected.includes('아요?') ||
-                        correction.corrected.includes('습니까') ||
-                        correction.corrected.includes('ㄹ까요');
+      // Enhanced question detection
+      const questionPatterns = ['?', 'ㅂ니까', '습니까', 'ㄹ까요', '을까요', '나요', '나', '세요?', '어요?', '아요?', '지요?', '죠?', '니?', '지?'];
+      const isQuestion = questionPatterns.some(pattern => correction.corrected.includes(pattern));
       
       const recentMessages = messages.slice(-3).map(m => ({
         role: m.type === 'user' ? 'user' : 'assistant',
@@ -160,9 +157,9 @@ const KoreanLearningApp = () => {
 RULES:
 1. Response 100% Korean
 2. Level: ${settings.userLevel.join(', ') || 'beginner'}
-3. If user asks question (?): Answer directly
-4. If user makes statement: Continue conversation (ask follow-up or respond)
-5. Keep it natural and engaging
+3. If user asks question: Answer directly and clearly
+4. If user makes statement: Continue conversation naturally (comment or ask follow-up)
+5. Be engaging and natural
 
 Return JSON:
 {
@@ -175,7 +172,7 @@ Return JSON:
           ...recentMessages,
           { 
             role: 'user', 
-            content: `${correction.corrected}${isQuestion ? ' [QUESTION]' : ' [STATEMENT]'}` 
+            content: `${correction.corrected}${isQuestion ? ' [This is a QUESTION - answer it]' : ' [This is a STATEMENT - respond conversationally]'}` 
           }
         ],
         temperature: 0.7
@@ -205,6 +202,8 @@ Return JSON:
       };
       
       setMessages(prev => [...prev, aiMsg]);
+      
+      // Auto-play TTS immediately
       playTTS(aiMsg.id, aiResult.response);
       
     } catch (error) {
@@ -337,7 +336,7 @@ Return JSON:
                 
                 <div style={{display: 'flex', gap: '8px', marginTop: '12px'}}>
                   <button onClick={() => replayAudio(msg)} disabled={currentAudioPlaying === msg.id} style={{flex: 1, background: currentAudioPlaying === msg.id ? '#999' : '#2196f3', color: 'white', border: 'none', borderRadius: '20px', padding: '10px', cursor: 'pointer', fontSize: '14px'}}>
-                    {currentAudioPlaying === msg.id ? '▶️' : '🔊'} Nghe
+                    {currentAudioPlaying === msg.id ? '▶️' : '🔊'} Nghe lại
                   </button>
                   
                   <button onClick={() => toggleDetails(msg.id)} style={{flex: 1, background: expandedDetails[msg.id] ? '#ff9800' : '#4caf50', color: 'white', border: 'none', borderRadius: '20px', padding: '10px', cursor: 'pointer', fontSize: '14px'}}>
