@@ -16,7 +16,6 @@ const KoreanLearningApp = () => {
   const audioChunksRef = useRef([]);
   const recognitionRef = useRef(null);
 
-  // API Helper
   const callOpenAI = async (endpoint, body, method = 'POST') => {
     const response = await fetch('/api/openai', {
       method: 'POST',
@@ -256,11 +255,16 @@ const KoreanLearningApp = () => {
       
       const audio = new Audio(audioUrl);
       
-      audio.onplay = () => {
+      audio.onloadedmetadata = () => {
         displayTextWithTyping(messageId, text, audio.duration * 1000);
       };
       
       audio.onended = () => {
+        setCurrentAudioPlaying(null);
+      };
+      
+      audio.onerror = (e) => {
+        console.error('Audio playback error:', e);
         setCurrentAudioPlaying(null);
       };
       
@@ -274,7 +278,7 @@ const KoreanLearningApp = () => {
 
   const displayTextWithTyping = (messageId, fullText, duration) => {
     const characters = fullText.split('');
-    const intervalTime = duration / characters.length;
+    const intervalTime = Math.max(duration / characters.length, 50);
     let currentIndex = 0;
     
     const interval = setInterval(() => {
