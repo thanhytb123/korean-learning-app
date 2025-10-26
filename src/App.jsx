@@ -122,18 +122,44 @@ const KoreanLearningApp = () => {
         messages: [
           {
             role: 'system',
-            content: `Korean teacher. Check grammar in context. Return ONLY valid JSON:
+            content: `Expert Korean teacher. Grammar check with context awareness.
+
+CRITICAL RULES:
+1. Multiple sentences without punctuation (e.g., "네 밥 먹었어요") → CORRECT, just add periods
+2. Only mark ERROR if actual grammar/vocabulary mistake
+3. Natural speech omits punctuation - NOT an error
+4. Add punctuation where needed, don't mark as wrong
+
+Return ONLY valid JSON:
 {
-  "isCorrect": true,
-  "corrected": "corrected sentence",
-  "details": "Detailed Vietnamese explanation"
+  "isCorrect": true/false,
+  "corrected": "sentence with proper punctuation",
+  "details": "DETAILED Vietnamese explanation (if error):
+  
+🔍 Phân tích câu:
+Câu gốc: [original text]
+Câu sửa: [corrected text]
+
+❌ Lỗi phát hiện:
+• Loại lỗi: [grammar/vocabulary/word order]
+• Chi tiết lỗi: [specific mistake]
+• Tại sao sai: [reason with grammar explanation]
+
+✅ Cách sửa đúng:
+• Giải thích: [detailed explanation]
+• Ngữ pháp liên quan: [grammar rules]
+• Ví dụ tương tự:
+  - [Example 1]
+  - [Example 2]
+
+💡 Lưu ý: [usage tips]"
 }
 
-NO markdown, NO extra text, ONLY JSON.`
+NO markdown, ONLY JSON.`
           },
           { 
             role: 'user', 
-            content: `Context:\n${recentContext || 'No context'}\n\nCheck: "${userText}"` 
+            content: `Context:\n${recentContext || 'First message'}\n\nAnalyze: "${userText}"` 
           }
         ],
         temperature: 0.2
@@ -183,22 +209,22 @@ NO markdown, NO extra text, ONLY JSON.`
 
 CRITICAL: Return ONLY valid JSON, NO markdown:
 {
-  "response": "100% Korean response text",
-  "vocabulary": [{"word": "단어", "meaning": "nghĩa", "pronunciation": "phiên âm", "example": "VD (nghĩa)"}],
-  "grammar": [{"pattern": "문법", "explanation": "Giải thích tiếng Việt", "usage": "Cách dùng", "examples": ["VD1 (nghĩa)", "VD2"]}]
+  "response": "100% Korean response",
+  "vocabulary": [{"word": "단어", "meaning": "nghĩa tiếng Việt", "pronunciation": "phiên âm", "example": "Ví dụ tiếng Hàn (Nghĩa tiếng Việt)"}],
+  "grammar": [{"pattern": "문법", "explanation": "Giải thích chi tiết tiếng Việt", "usage": "Khi nào dùng, cách dùng", "examples": ["VD1 (nghĩa)", "VD2 (nghĩa)", "VD3 (nghĩa)"]}]
 }
 
 Rules:
 - Response 100% Korean
-- If user asks QUESTION: Answer it
-- If user makes STATEMENT: Continue conversation
+- If QUESTION: Answer directly
+- If STATEMENT: Continue conversation naturally
 - Level: ${settings.userLevel.join(', ') || 'beginner'}
-- Include 4-5 vocab + 2-3 grammar`
+- Include 4-6 vocab + 2-4 grammar with DETAILED examples`
           },
           ...recentMessages,
           { 
             role: 'user', 
-            content: `${userMsg.correctedText} ${isQuestion ? '[QUESTION - Answer it]' : '[STATEMENT - Respond naturally]'}` 
+            content: `${userMsg.correctedText} ${isQuestion ? '[QUESTION - Answer it clearly]' : '[STATEMENT - Respond conversationally]'}` 
           }
         ],
         temperature: 0.7
