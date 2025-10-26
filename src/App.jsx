@@ -15,10 +15,7 @@ const KoreanLearningApp = () => {
   const [textInput, setTextInput] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   
-  const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
   const recognitionRef = useRef(null);
-  const recognitionTimeoutRef = useRef(null);
 
   const callOpenAI = async (endpoint, body) => {
     const response = await fetch('/api/openai', {
@@ -32,6 +29,22 @@ const KoreanLearningApp = () => {
 
   useEffect(() => {
     requestMicrophonePermission();
+    
+    // Initialize speech recognition
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.lang = 'ko-KR';
+      recognitionRef.current.continuous = false;
+      recognitionRef.current.interimResults = false;
+      recognitionRef.current.maxAlternatives = 1;
+    }
+    
+    return () => {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.abort(); } catch (e) {}
+      }
+    };
   }, []);
 
   const requestMicrophonePermission = async () => {
@@ -44,113 +57,68 @@ const KoreanLearningApp = () => {
     }
   };
 
-  useEffect(() => {
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) return;
+  const handleVoiceStart = (e) => {
+    e.preventDefault();
     
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    recognitionRef.current = new SpeechRecognition();
-    recognitionRef.current.lang = 'ko-KR';
-    recognitionRef.current.continuous = false;
-    recognitionRef.current.interimResults = false;
-    
-    return () => {
-      if (recognitionRef.current) {
-        try { recognitionRef.current.stop(); } catch (e) {}
-      }
-    };
-  }, []);
-
-  const handleVoiceStart = async (e) => {
-    e.preventDefault(); // Ngăn chặn copy/select
-    
-    if (micPermission !== 'granted' || isProcessing || isRecording) return;
+    if (!recognitionRef.current || micPermission !== 'granted' || isProcessing || isRecording) {
+      alert('Microphone không khả dụng. Vui lòng dùng ô nhập text phía trên!');
+      return;
+    }
     
     setIsRecording(true);
     
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } 
-      });
-      
-      mediaRecorderRef.current = new MediaRecorder(stream);
-      mediaRecorderRef.current.start();
-      
-      if (recognitionRef.current) {
-        recognitionRef.current.onresult = async (event) => {
-          const transcript = event.results[0][0].transcript;
-          
-          if (transcript && transcript.trim().length > 0) {
-            clearTimeout(recognitionTimeoutRef.current);
-            
-            setIsRecording(false);
-            
-            if (mediaRecorderRef.current) {
-              try {
-                mediaRecorderRef.current.stop();
-                mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
-              } catch(e) {}
-            }
-            
-            await processUserInput(transcript);
-          }
-        };
+    recognitionRef.current.onresult = (event) => {
+      try {
+        const transcript = event.results[0][0].transcript;
         
-        recognitionRef.current.onerror = (e) => {
-          console.error('Recognition error:', e.error);
+        if (transcript && transcript.trim()) {
+          console.log('Recognized:', transcript);
           setIsRecording(false);
-          clearTimeout(recognitionTimeoutRef.current);
-        };
-        
-        recognitionRef.current.onend = () => {
-          console.log('Recognition ended');
-        };
-        
-        recognitionRef.current.start();
-        
-        // Timeout fallback nếu không nhận diện được sau 5 giây
-        recognitionTimeoutRef.current = setTimeout(() => {
-          if (isRecording) {
-            setIsRecording(false);
-            if (recognitionRef.current) {
-              try { recognitionRef.current.stop(); } catch (e) {}
-            }
-            if (mediaRecorderRef.current) {
-              try {
-                mediaRecorderRef.current.stop();
-                mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
-              } catch (e) {}
-            }
-          }
-        }, 5000);
+          processUserInput(transcript);
+        }
+      } catch (error) {
+        console.error('Result error:', error);
+        setIsRecording(false);
       }
+    };
+    
+    recognitionRef.current.onerror = (event) => {
+      console.error('Recognition error:', event.error);
+      setIsRecording(false);
+      
+      if (event.error === 'no-speech') {
+        alert('Không nghe thấy giọng nói!\n\nHãy dùng ô nhập text phía trên thay vì mic.');
+      } else if (event.error === 'not-allowed') {
+        alert('Quyền microphone bị từ chối!\n\nHãy dùng ô nhập text phía trên.');
+      }
+    };
+    
+    recognitionRef.current.onend = () => {
+      console.log('Recognition ended');
+      setIsRecording(false);
+    };
+    
+    try {
+      recognitionRef.current.start();
+      console.log('Recognition started');
     } catch (error) {
       console.error('Start error:', error);
       setIsRecording(false);
+      alert('Lỗi khởi động mic!\n\nHãy dùng ô nhập text phía trên.');
     }
   };
 
   const handleVoiceStop = (e) => {
-    e.preventDefault(); // Ngăn chặn copy/select
+    e.preventDefault();
     
-    clearTimeout(recognitionTimeoutRef.current);
-    
-    // Đợi 1 giây để speech recognition xử lý xong
-    setTimeout(() => {
-      if (isRecording) {
-        setIsRecording(false);
-        
-        if (recognitionRef.current) {
-          try { recognitionRef.current.stop(); } catch (e) {}
-        }
-        
-        if (mediaRecorderRef.current) {
-          try {
-            mediaRecorderRef.current.stop();
-            mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
-          } catch (e) {}
-        }
+    if (recognitionRef.current && isRecording) {
+      try {
+        recognitionRef.current.stop();
+      } catch (error) {
+        console.error('Stop error:', error);
       }
-    }, 1000);
+      setIsRecording(false);
+    }
   };
 
   const handleTextSubmit = (e) => {
@@ -170,7 +138,7 @@ const KoreanLearningApp = () => {
         messages: [
           {
             role: 'system',
-            content: `Korean teacher. Check grammar. Return JSON only:
+            content: `Korean teacher. Check grammar strictly. Return JSON only:
 {"isCorrect": true/false, "corrected": "fixed sentence", "details": "Vietnamese explanation"}`
           },
           { role: 'user', content: `Check: "${userText}"` }
@@ -209,15 +177,32 @@ const KoreanLearningApp = () => {
         messages: [
           {
             role: 'system',
-            content: `Korean teacher. RULES:
-1. Response MUST be 100% Korean
-2. Level: ${settings.userLevel.join(', ') || 'beginner'}
-3. Return JSON:
+            content: `Korean learning assistant. STRICT RULES:
+1. Response MUST be 100% Korean (한국어) - NO Vietnamese, NO English
+2. Student level: ${settings.userLevel.join(', ') || 'beginner (초급)'}
+3. Return ONLY this JSON format:
+
 {
-  "response": "Korean response",
-  "vocabulary": [{"word": "단어", "meaning": "nghĩa", "pronunciation": "phát âm", "example": "VD"}],
-  "grammar": [{"pattern": "문법", "explanation": "Giải thích", "usage": "Cách dùng", "examples": ["VD1", "VD2"]}]
-}`
+  "response": "Complete natural Korean response",
+  "vocabulary": [
+    {
+      "word": "Korean word",
+      "meaning": "Vietnamese meaning",
+      "pronunciation": "romanization",
+      "example": "Example sentence in Korean"
+    }
+  ],
+  "grammar": [
+    {
+      "pattern": "Grammar pattern in Korean",
+      "explanation": "Detailed Vietnamese explanation",
+      "usage": "How to use",
+      "examples": ["Example 1", "Example 2", "Example 3"]
+    }
+  ]
+}
+
+Be thorough and educational. Include 3-5 vocabulary words and 2-3 grammar points.`
           },
           { role: 'user', content: correction.corrected }
         ],
@@ -321,13 +306,7 @@ const KoreanLearningApp = () => {
       </header>
 
       {showSettings && (
-        <div style={{
-          background: 'white',
-          padding: '20px',
-          margin: '10px',
-          borderRadius: '10px',
-          boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
-        }}>
+        <div style={{background: 'white', padding: '20px', margin: '10px', borderRadius: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)'}}>
           <h3>Cài đặt</h3>
           <div style={{marginBottom: '15px'}}>
             <label style={{display: 'block', marginBottom: '5px'}}>Giọng AI:</label>
@@ -341,7 +320,7 @@ const KoreanLearningApp = () => {
             </select>
           </div>
           <div>
-            <label style={{display: 'block', marginBottom: '5px'}}>Trình độ ngữ pháp:</label>
+            <label style={{display: 'block', marginBottom: '5px'}}>Trình độ:</label>
             <input
               type="text"
               placeholder="VD: -이에요, -아요/어요"
@@ -352,28 +331,19 @@ const KoreanLearningApp = () => {
           </div>
           <button
             onClick={() => setShowSettings(false)}
-            style={{
-              marginTop: '15px',
-              padding: '10px 20px',
-              background: '#4caf50',
-              color: 'white',
-              border: 'none',
-              borderRadius: '5px',
-              cursor: 'pointer',
-              width: '100%'
-            }}
+            style={{marginTop: '15px', padding: '10px 20px', background: '#4caf50', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', width: '100%'}}
           >
             Đóng
           </button>
         </div>
       )}
       
-      <div className="chat-container" style={{paddingBottom: '100px'}}>
+      <div className="chat-container" style={{paddingBottom: '160px'}}>
         {messages.length === 0 && (
-          <div className="welcome-message" style={{textAlign: 'center', padding: '20px'}}>
+          <div style={{textAlign: 'center', padding: '20px'}}>
             <h2 style={{fontSize: '24px', marginBottom: '15px'}}>환영합니다!</h2>
-            <p style={{fontSize: '16px', color: '#666'}}>Nhập hoặc nói câu tiếng Hàn bên dưới</p>
-            <p style={{fontSize: '14px', color: '#999', marginTop: '10px'}}>💡 VD: [translate:안녕하세요], [translate:감사합니다]</p>
+            <p style={{fontSize: '16px', color: '#666'}}>Nhập câu tiếng Hàn bên dưới để học</p>
+            <p style={{fontSize: '14px', color: '#999', marginTop: '10px'}}>💡 VD: [translate:안녕하세요], [translate:감사합니다], [translate:잘 지냈어요?]</p>
           </div>
         )}
         
@@ -381,12 +351,7 @@ const KoreanLearningApp = () => {
           <div key={msg.id} className={`message ${msg.type}`} style={{marginBottom: '15px'}}>
             {msg.type === 'user' ? (
               <div className="user-message">
-                <div className="message-bubble" style={{
-                  background: msg.isCorrect ? '#e3f2fd' : '#ffebee',
-                  padding: '15px',
-                  borderRadius: '15px',
-                  marginLeft: '20px'
-                }}>
+                <div className="message-bubble" style={{background: msg.isCorrect ? '#e3f2fd' : '#ffebee', padding: '15px', borderRadius: '15px', marginLeft: '20px'}}>
                   {!msg.isCorrect && (
                     <div style={{textDecoration: 'line-through', color: '#f44336', marginBottom: '8px'}}>
                       {msg.originalText}
@@ -404,45 +369,15 @@ const KoreanLearningApp = () => {
               </div>
             ) : (
               <div className="ai-message">
-                <div className="message-bubble" style={{
-                  background: '#f5f5f5',
-                  padding: '15px',
-                  borderRadius: '15px',
-                  marginRight: '20px'
-                }}>
+                <div className="message-bubble" style={{background: '#f5f5f5', padding: '15px', borderRadius: '15px', marginRight: '20px'}}>
                   <div style={{fontSize: '16px', fontWeight: '500', marginBottom: '10px'}}>{msg.text}</div>
                   
                   <div style={{display: 'flex', gap: '8px', marginTop: '12px'}}>
-                    <button 
-                      onClick={() => replayAudio(msg)} 
-                      disabled={currentAudioPlaying === msg.id}
-                      style={{
-                        flex: 1,
-                        background: currentAudioPlaying === msg.id ? '#999' : '#2196f3',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '20px',
-                        padding: '10px',
-                        cursor: 'pointer',
-                        fontSize: '14px'
-                      }}
-                    >
+                    <button onClick={() => replayAudio(msg)} disabled={currentAudioPlaying === msg.id} style={{flex: 1, background: currentAudioPlaying === msg.id ? '#999' : '#2196f3', color: 'white', border: 'none', borderRadius: '20px', padding: '10px', cursor: 'pointer', fontSize: '14px'}}>
                       {currentAudioPlaying === msg.id ? '▶️' : '🔊'} Nghe
                     </button>
                     
-                    <button 
-                      onClick={() => toggleDetails(msg.id)}
-                      style={{
-                        flex: 1,
-                        background: expandedDetails[msg.id] ? '#ff9800' : '#4caf50',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '20px',
-                        padding: '10px',
-                        cursor: 'pointer',
-                        fontSize: '14px'
-                      }}
-                    >
+                    <button onClick={() => toggleDetails(msg.id)} style={{flex: 1, background: expandedDetails[msg.id] ? '#ff9800' : '#4caf50', color: 'white', border: 'none', borderRadius: '20px', padding: '10px', cursor: 'pointer', fontSize: '14px'}}>
                       {expandedDetails[msg.id] ? '🔼' : '📚'} Chi tiết
                     </button>
                   </div>
@@ -511,86 +446,53 @@ const KoreanLearningApp = () => {
         )}
       </div>
       
-      {/* INPUT AREA - Inline với nút mic */}
-      <div style={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        background: 'white',
-        padding: '12px',
-        boxShadow: '0 -2px 10px rgba(0,0,0,0.1)',
-        zIndex: 1000
-      }}>
-        <form onSubmit={handleTextSubmit} style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
-          <input
-            type="text"
-            value={textInput}
-            onChange={(e) => setTextInput(e.target.value)}
-            placeholder="Nhập câu tiếng Hàn..."
-            disabled={isProcessing || isRecording}
-            style={{
-              flex: 1,
-              padding: '14px',
-              fontSize: '16px',
-              border: '2px solid #2196f3',
-              borderRadius: '25px',
-              outline: 'none'
-            }}
-          />
-          
-          {micPermission === 'granted' && (
+      <div style={{position: 'fixed', bottom: 0, left: 0, right: 0, background: 'white', padding: '12px', boxShadow: '0 -2px 10px rgba(0,0,0,0.1)', zIndex: 1000}}>
+        <form onSubmit={handleTextSubmit} style={{marginBottom: '10px'}}>
+          <div style={{display: 'flex', gap: '10px'}}>
+            <input
+              type="text"
+              value={textInput}
+              onChange={(e) => setTextInput(e.target.value)}
+              placeholder="Nhập câu tiếng Hàn... (VD: 안녕하세요)"
+              disabled={isProcessing || isRecording}
+              style={{flex: 1, padding: '14px', fontSize: '16px', border: '2px solid #2196f3', borderRadius: '25px', outline: 'none'}}
+            />
             <button
-              type="button"
-              onMouseDown={handleVoiceStart}
-              onMouseUp={handleVoiceStop}
-              onTouchStart={handleVoiceStart}
-              onTouchEnd={handleVoiceStop}
-              onContextMenu={(e) => e.preventDefault()}
-              disabled={isProcessing}
-              style={{
-                width: '56px',
-                height: '56px',
-                background: isRecording ? '#f44336' : '#4caf50',
-                color: 'white',
-                border: 'none',
-                borderRadius: '50%',
-                cursor: isProcessing ? 'not-allowed' : 'pointer',
-                fontSize: '24px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                userSelect: 'none',
-                WebkitUserSelect: 'none',
-                MozUserSelect: 'none',
-                msUserSelect: 'none',
-                WebkitTouchCallout: 'none'
-              }}
+              type="submit"
+              disabled={isProcessing || !textInput.trim() || isRecording}
+              style={{width: '56px', height: '56px', background: isProcessing || !textInput.trim() ? '#ccc' : '#2196f3', color: 'white', border: 'none', borderRadius: '50%', cursor: isProcessing || !textInput.trim() ? 'not-allowed' : 'pointer', fontSize: '24px'}}
             >
-              🎤
+              {isProcessing ? '⏳' : '➤'}
             </button>
-          )}
-          
+          </div>
+        </form>
+
+        {micPermission === 'granted' && (
           <button
-            type="submit"
-            disabled={isProcessing || !textInput.trim() || isRecording}
+            onTouchStart={handleVoiceStart}
+            onTouchEnd={handleVoiceStop}
+            onMouseDown={handleVoiceStart}
+            onMouseUp={handleVoiceStop}
+            onContextMenu={(e) => e.preventDefault()}
+            disabled={isProcessing}
             style={{
-              width: '56px',
-              height: '56px',
-              background: isProcessing || !textInput.trim() ? '#ccc' : '#2196f3',
+              width: '100%',
+              padding: '15px',
+              background: isRecording ? '#f44336' : '#4caf50',
               color: 'white',
               border: 'none',
-              borderRadius: '50%',
-              cursor: isProcessing || !textInput.trim() ? 'not-allowed' : 'pointer',
-              fontSize: '24px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
+              borderRadius: '25px',
+              cursor: isProcessing ? 'not-allowed' : 'pointer',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+              WebkitTouchCallout: 'none'
             }}
           >
-            {isProcessing ? '⏳' : '➤'}
+            {isRecording ? '🎤 Đang ghi...' : '🎤 Nhấn giữ để nói (không ổn định)'}
           </button>
-        </form>
+        )}
       </div>
     </div>
   );
