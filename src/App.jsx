@@ -99,17 +99,36 @@ const KoreanLearningApp = () => {
     setIsProcessing(true);
     
     try {
+      // Build context for grammar check
+      const recentContext = messages.slice(-2).map(m => 
+        m.type === 'user' ? `User: ${m.correctedText}` : `AI: ${m.text}`
+      ).join('\n');
+      
       const correctionResponse = await callOpenAI('/v1/chat/completions', {
         model: 'gpt-4o-mini',
         messages: [
           {
             role: 'system',
-            content: `Korean teacher. Check grammar. Return JSON:
-{"isCorrect": true/false, "corrected": "fixed", "details": "Vietnamese explanation"}`
+            content: `Korean teacher. Analyze sentence in context. Return DETAILED JSON:
+{
+  "isCorrect": true/false,
+  "corrected": "corrected sentence",
+  "details": "DETAILED Vietnamese explanation:
+  - Lỗi gì? (ngữ pháp, từ vựng, trật tự từ...)
+  - Tại sao sai?
+  - Câu đúng là gì?
+  - Giải thích chi tiết ngữ pháp/từ vựng
+  - Ví dụ tương tự"
+}
+
+Be very detailed in Vietnamese explanation!`
           },
-          { role: 'user', content: userText }
+          { 
+            role: 'user', 
+            content: `Context:\n${recentContext || 'No previous context'}\n\nCheck this sentence: "${userText}"` 
+          }
         ],
-        temperature: 0.1
+        temperature: 0.2
       });
       
       const correctionData = await correctionResponse.json();
@@ -139,7 +158,7 @@ const KoreanLearningApp = () => {
       }
       
       // Enhanced question detection
-      const questionPatterns = ['?', 'ㅂ니까', '습니까', 'ㄹ까요', '을까요', '나요', '나', '세요?', '어요?', '아요?', '지요?', '죠?', '니?', '지?'];
+      const questionPatterns = ['?', 'ㅂ니까', '습니까', 'ㄹ까요', '을까요', '나요', '세요?', '어요?', '아요?', '지요?', '죠?', '니?', '지?', '요?'];
       const isQuestion = questionPatterns.some(pattern => correction.corrected.includes(pattern));
       
       const recentMessages = messages.slice(-3).map(m => ({
@@ -152,27 +171,28 @@ const KoreanLearningApp = () => {
         messages: [
           {
             role: 'system',
-            content: `Korean teacher. Natural conversation with learner.
+            content: `Korean teacher. Natural conversation.
 
-RULES:
+CRITICAL RULES:
 1. Response 100% Korean
 2. Level: ${settings.userLevel.join(', ') || 'beginner'}
-3. If user asks question: Answer directly and clearly
-4. If user makes statement: Continue conversation naturally (comment or ask follow-up)
-5. Be engaging and natural
+3. DETECT TYPE:
+   - If user asks QUESTION (?, 나요, 어요?, etc): Answer the question directly
+   - If user makes STATEMENT: Continue conversation (comment or ask follow-up)
+4. Be natural and engaging
 
 Return JSON:
 {
-  "response": "Korean response",
-  "vocabulary": [{"word": "단어", "meaning": "nghĩa", "pronunciation": "phát âm", "example": "VD"}],
-  "grammar": [{"pattern": "문법", "explanation": "Giải thích", "usage": "Cách dùng", "examples": ["VD1", "VD2"]}]
+  "response": "Korean response (answer question OR continue conversation)",
+  "vocabulary": [{"word": "단어", "meaning": "nghĩa tiếng Việt", "pronunciation": "phát âm", "example": "Ví dụ tiếng Hàn (Nghĩa tiếng Việt)"}],
+  "grammar": [{"pattern": "문법", "explanation": "Giải thích chi tiết tiếng Việt", "usage": "Cách dùng", "examples": ["VD1 (nghĩa)", "VD2 (nghĩa)"]}]
 }
-4-5 vocab + 2-3 grammar.`
+Include 4-5 vocab + 2-3 grammar.`
           },
           ...recentMessages,
           { 
             role: 'user', 
-            content: `${correction.corrected}${isQuestion ? ' [This is a QUESTION - answer it]' : ' [This is a STATEMENT - respond conversationally]'}` 
+            content: `${correction.corrected} ${isQuestion ? '[USER IS ASKING A QUESTION - ANSWER IT]' : '[USER MADE A STATEMENT - RESPOND NATURALLY]'}` 
           }
         ],
         temperature: 0.7
@@ -202,8 +222,6 @@ Return JSON:
       };
       
       setMessages(prev => [...prev, aiMsg]);
-      
-      // Auto-play TTS immediately
       playTTS(aiMsg.id, aiResult.response);
       
     } catch (error) {
@@ -321,12 +339,33 @@ Return JSON:
                     {msg.originalText}
                   </div>
                 )}
-                <div style={{color: msg.isCorrect ? '#1976d2' : '#e91e63', fontWeight: 'bold', fontSize: '16px'}}>
+                <div style={{color: msg.isCorrect ? '#1976d2' : '#e91e63', fontWeight: 'bold', fontSize: '16px', marginBottom: msg.isCorrect ? 0 : '10px'}}>
                   {msg.correctedText}
+                  {msg.isCorrect && <span style={{marginLeft: '6px', fontSize: '14px'}}>✓</span>}
                 </div>
-                {!msg.isCorrect && msg.details && (
-                  <div style={{marginTop: '10px', fontSize: '14px', color: '#666', background: 'white', padding: '10px', borderRadius: '8px'}}>
-                    📝 {msg.details}
+                
+                {!msg.isCorrect && (
+                  <button 
+                    onClick={() => toggleDetails(msg.id)}
+                    style={{
+                      marginTop: '8px',
+                      padding: '8px 16px',
+                      background: expandedDetails[msg.id] ? '#ff9800' : '#2196f3',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '20px',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      width: '100%'
+                    }}
+                  >
+                    {expandedDetails[msg.id] ? '🔼 Ẩn giải thích' : '📝 Xem giải thích chi tiết'}
+                  </button>
+                )}
+                
+                {!msg.isCorrect && expandedDetails[msg.id] && msg.details && (
+                  <div style={{marginTop: '12px', fontSize: '14px', color: '#333', background: 'white', padding: '12px', borderRadius: '8px', lineHeight: '1.6', whiteSpace: 'pre-wrap'}}>
+                    {msg.details}
                   </div>
                 )}
               </div>
