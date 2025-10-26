@@ -149,74 +149,87 @@ const KoreanLearningApp = () => {
         messages: [
           {
             role: 'system',
-            content: `You are an expert Korean grammar checker with context awareness. Return JSON.
+            content: `Korean grammar checker - STRICT RULES. Return JSON.
 
-**CRITICAL RULES:**
+**ONLY 3 THINGS CAN BE DROPPED (CORRECT):**
 
-1. SUBJECT OMISSION = CORRECT (standard Korean):
-   ✅ "먹었어요?" = CORRECT (subject omitted, has verb)
-   ✅ "가자" = CORRECT (command)
-   ✅ "좋아" = CORRECT (predicate)
-   ✅ "공부했어요" = CORRECT (has verb)
+1. ✅ DROP SUBJECT:
+   - "먹었어요?" = CORRECT (no subject)
+   - "밥 먹었어요?" = CORRECT (no subject)
 
-2. PRONUNCIATION ERRORS = INCORRECT:
-   ❌ "밤 먹었어요?" → "밥 먹었어요?" (night vs rice)
-   ❌ "눈 와요" (context dependent)
-   
-3. INCOMPLETE = INCORRECT:
-   ❌ "밥" (just noun)
-   ❌ "저는" (just pronoun)
-   ❌ "한국어" (just noun)
+2. ✅ DROP PARTICLES (을/를, 이/가, 에, 한테, etc):
+   - "밥 먹었어요?" = CORRECT (dropped 을)
+   - "학교 갔어요" = CORRECT (dropped 에)
 
-**ANALYSIS:**
-1. Has verb/adjective? → If YES + makes sense → CORRECT
-2. Pronunciation error (wrong word but has predicate)? → INCORRECT
-3. Incomplete (no predicate)? → INCORRECT
-4. Check context
+3. ✅ DROP 요:
+   - "먹었어" = CORRECT (dropped 요)
+   - "밥 먹었어" = CORRECT (dropped 요)
+
+**EVERYTHING ELSE = ERROR:**
+
+❌ CANNOT drop verb endings (except 요):
+   - "밥 먹" = WRONG (dropped 었어)
+   - "먹" = WRONG (incomplete verb)
+   - "가" = WRONG (incomplete verb)
+
+❌ Must have complete verb stem + tense:
+   - NEED: 먹다 → 먹어, 먹었어, 먹었어요 ✅
+   - WRONG: 먹 alone ❌
+
+❌ Pronunciation errors:
+   - "밤 먹었어요" = WRONG (밤→밥)
+
+❌ No predicate:
+   - "밥" alone = WRONG
+   - "저는" alone = WRONG
+
+**CORRECT EXAMPLES:**
+✅ "밥 먹었어요?" (dropped subject + 을)
+✅ "밥 먹었어" (dropped subject + 을 + 요)
+✅ "먹었어요" (dropped subject)
+✅ "먹었어" (dropped subject + 요)
+✅ "학교 갔어" (dropped subject + 에 + 요)
+
+**WRONG EXAMPLES:**
+❌ "밥 먹" (dropped 었어 - NOT ALLOWED)
+❌ "먹" (incomplete verb)
+❌ "가" (incomplete verb)
+❌ "밤 먹었어요" (pronunciation error)
+❌ "밥" (no verb)
 
 **JSON:**
 {
   "isCorrect": true/false,
-  "corrected": "fixed text",
-  "errorType": "pronunciation|incomplete|grammar|none",
+  "corrected": "text",
+  "errorType": "incomplete|pronunciation|grammar|none",
   "explanation": "Vietnamese (if error)"
 }
 
-**EXPLANATION FORMAT:**
+**EXPLANATION FORMAT (if error):**
 🔍 Phân tích lỗi:
 - Câu của bạn: "[original]"
 - Vấn đề: [problem]
 
 ❌ Tại sao sai:
-[Vietnamese explanation]
+[Vietnamese]
 
 ✅ Cách sửa:
 - Câu đúng: "[corrected]"
-- Giải thích: [how]
+- Giải thích: [fix]
 
 📝 Ví dụ:
 1) [ex1]
 2) [ex2]
 3) [ex3]
 
-**EXAMPLES:**
-
-"먹었어요?" → {"isCorrect": true, "corrected": "먹었어요?", "errorType": "none"}
-
-"밤 먹었어요?" → {"isCorrect": false, "corrected": "밥 먹었어요?", "errorType": "pronunciation", "explanation": "🔍 Phân tích lỗi:\\n- Câu của bạn: '밤 먹었어요?'\\n- Vấn đề: Nhầm '밤' (đêm) với '밥' (cơm)\\n\\n❌ Tại sao sai:\\nNgữ cảnh ăn uống phải dùng '밥' (cơm).\\n\\n✅ Cách sửa:\\n- Câu đúng: '밥 먹었어요?'\\n- Giải thích: Hỏi 'Ăn cơm chưa?'\\n\\n📝 Ví dụ:\\n1) 밥 먹었어요? (Ăn cơm chưa?)\\n2) 밥 먹을래요? (Ăn cơm không?)\\n3) 아침 먹었어요? (Ăn sáng chưa?)"}
-
-"밥" → {"isCorrect": false, "corrected": "밥 먹었어요?", "errorType": "incomplete", "explanation": "🔍 Phân tích lỗi:\\n- Câu của bạn: '밥'\\n- Vấn đề: Chỉ có danh từ, thiếu động từ\\n\\n❌ Tại sao sai:\\nCâu cần động từ để hoàn chỉnh.\\n\\n✅ Cách sửa:\\n- Câu đúng: '밥 먹었어요?'\\n\\n📝 Ví dụ:\\n1) 밥 → 밥 먹었어요?\\n2) 물 → 물 마셨어요?\\n3) 한국어 → 한국어 공부해요"}
-
-"가자" → {"isCorrect": true, "corrected": "가자", "errorType": "none"}
-
-BE SMART. Context matters. Shorthand OK if meaningful.`
+BE STRICT: Only allow dropping subject, particles (을/를/이/가/에), and 요. Verb MUST have tense marker (었/ㄴ/는/ㄹ/etc).`
           },
           {
             role: 'user',
-            content: `Context: ${recent}\n\nSentence: "${original}"\n\nRemember: Subject omission CORRECT. Only error if: 1) Pronunciation, 2) No predicate, 3) Nonsensical.`
+            content: `Context: ${recent}\n\nSentence: "${original}"\n\nREMEMBER: Can ONLY drop: 1) subject, 2) particles, 3) 요. Verb MUST be complete with tense.`
           }
         ],
-        temperature: 0.15,
+        temperature: 0.1,
         max_tokens: 400
       };
 
