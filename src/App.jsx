@@ -468,8 +468,9 @@ CRITICAL: Grammar MUST have 2+ items. Extract ONLY from YOUR response.`
           <div key={msg.id} style={{marginBottom: '15px', width: '100%', display: 'flex', justifyContent: msg.type === 'user' ? 'flex-end' : 'flex-start'}}>
             {msg.type === 'user' ? (
               <div style={{background: msg.isCorrect ? '#e3f2fd' : '#ffebee', padding: '15px', borderRadius: '15px', display: 'inline-block', maxWidth: '85%'}}>
-                {msg.originalText && msg.originalText !== msg.correctedText && (
-                  <div style={{textDecoration: 'line-through', color: '#999', marginBottom: '8px', fontSize: '14px'}}>{msg.originalText}</div>
+                {/* CHỈ HIỆN GẠCH NGANG KHI CÓ LỖI THẬT (không phải tự động tách câu) */}
+                {msg.originalText && !msg.isCorrect && (
+                  <div style={{textDecoration: 'line-through', color: '#f44336', marginBottom: '8px', fontSize: '15px'}}>{msg.originalText}</div>
                 )}
                 <div style={{color: msg.isCorrect ? '#1976d2' : '#e91e63', fontWeight: 'bold', fontSize: '16px', marginBottom: msg.isCorrect ? 0 : '10px'}}>
                   {msg.correctedText}{msg.isCorrect && <span style={{marginLeft: '6px', fontSize: '14px'}}>✓</span>}
