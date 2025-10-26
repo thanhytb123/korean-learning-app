@@ -187,35 +187,35 @@ const KoreanLearningApp = () => {
         messages: [
           {
             role: 'system',
-            content: `You are a Korean grammar checker. Return a compact JSON. Subject omission is CORRECT unless the sentence lacks predicate.
+            content: `Korean grammar checker with pronunciation error detection. Return JSON.
 
-Return JSON exactly: 
+**PRONUNCIATION ERRORS** (common mistakes):
+- 밤/밥 (night/rice): "밤 먹었어요?" → Correct to "밥 먹었어요?"
+- 눈/는 (snow/topic marker): Check context
+- 밧/받 (rope/receive): Check context
+- Similar sounding words → Auto-correct based on context
+
+**GRAMMAR RULES:**
+✅ CORRECT: Has verb/predicate, subject omission OK
+❌ ERROR: Only noun/pronoun without predicate
+
+JSON format:
 {
-  "isCorrect": true/false, 
-  "corrected": "corrected text", 
-  "errorType": "incomplete|grammar|none", 
-  "explanation": "Detailed Vietnamese explanation with examples (ONLY if error exists)"
+  "isCorrect": true/false,
+  "corrected": "corrected text (fix pronunciation errors)",
+  "errorType": "pronunciation|incomplete|grammar|none",
+  "explanation": "Vietnamese explanation (ONLY if error)"
 }
 
-Format for explanation (if error):
-🔍 Phân tích lỗi:
-- Câu của bạn: "..."
-- Vấn đề: ...
+Example:
+Input: "밤 먹었어요?"
+Output: {"isCorrect": false, "corrected": "밥 먹었어요?", "errorType": "pronunciation", "explanation": "🔍 Phân tích lỗi:\\n- Câu của bạn: '밤 먹었어요?'\\n- Vấn đề: Bạn đã nhầm '밤' (đêm) thành '밥' (cơm).\\n\\n❌ Tại sao sai:\\nTrong ngữ cảnh ăn uống, '밥' (cơm) là từ đúng, không phải '밤' (đêm/ban đêm).\\n\\n✅ Câu đúng: '밥 먹었어요?'\\n- Giải thích: Hỏi 'Bạn đã ăn cơm chưa?'\\n\\n📝 Ví dụ:\\n1) 밥 먹었어요? (Bạn đã ăn cơm chưa?)\\n2) 저녁 먹었어요? (Bạn đã ăn tối chưa?)"}
 
-❌ Tại sao sai:
-...
-
-✅ Cách sửa:
-- Câu đúng: "..."
-- Giải thích: ...
-
-📝 Ví dụ:
-1) ...
-2) ...`
+Subject omission is CORRECT Korean grammar.`
           },
           { role: 'user', content: `Context: ${recent}\nAnalyze: "${original}"` }
         ],
-        temperature: 0.05
+        temperature: 0.1
       };
 
       let correction = null;
@@ -304,7 +304,6 @@ CRITICAL: Grammar array MUST have at least 2 items. Extract ONLY from YOUR respo
         aiResult = { response: fallback, vocabulary: [], grammar: [] };
       }
 
-      // KHÔNG filter để debug - hiện tất cả
       const filteredVocab = aiResult.vocabulary || [];
       const filteredGrammar = aiResult.grammar || [];
 
