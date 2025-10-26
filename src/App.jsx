@@ -18,6 +18,7 @@ const KoreanLearningApp = () => {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   
   const recognitionRef = useRef(null);
+  const isRecordingRef = useRef(false);
 
   const callOpenAI = async (endpoint, body) => {
     const response = await fetch('/api/openai', {
@@ -36,13 +37,53 @@ const KoreanLearningApp = () => {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       recognitionRef.current = new SpeechRecognition();
       recognitionRef.current.lang = 'ko-KR';
-      recognitionRef.current.continuous = false;
-      recognitionRef.current.interimResults = false;
+      recognitionRef.current.continuous = true;
+      recognitionRef.current.interimResults = true;
+      
+      recognitionRef.current.onresult = (event) => {
+        let finalTranscript = '';
+        let interimTranscript = '';
+        
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript;
+          } else {
+            interimTranscript += transcript;
+          }
+        }
+        
+        const fullText = (finalTranscript || interimTranscript).trim();
+        if (fullText) {
+          setRecognizedText(fullText);
+        }
+      };
+      
+      recognitionRef.current.onerror = (event) => {
+        console.error('Recognition error:', event.error);
+        if (event.error !== 'no-speech' && event.error !== 'aborted') {
+          setIsRecording(false);
+          isRecordingRef.current = false;
+        }
+      };
+      
+      recognitionRef.current.onend = () => {
+        if (isRecordingRef.current) {
+          try {
+            recognitionRef.current.start();
+          } catch (e) {
+            console.error('Restart error:', e);
+          }
+        }
+      };
     }
     
     return () => {
       if (recognitionRef.current) {
-        try { recognitionRef.current.abort(); } catch (e) {}
+        try { 
+          isRecordingRef.current = false;
+          recognitionRef.current.abort(); 
+        } catch (e) {}
       }
     };
   }, []);
@@ -59,36 +100,39 @@ const KoreanLearningApp = () => {
 
   const handleVoiceStart = (e) => {
     e.preventDefault();
-    if (!recognitionRef.current || micPermission !== 'granted' || isProcessing || isRecording) return;
+    if (!recognitionRef.current || micPermission !== 'granted' || isProcessing) return;
     
     setIsRecording(true);
+    isRecordingRef.current = true;
     setRecognizedText('');
-    
-    recognitionRef.current.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      if (transcript && transcript.trim()) {
-        setIsRecording(false);
-        setRecognizedText(transcript);
-        setShowConfirmDialog(true);
-      }
-    };
-    
-    recognitionRef.current.onerror = () => setIsRecording(false);
-    recognitionRef.current.onend = () => setIsRecording(false);
     
     try {
       recognitionRef.current.start();
     } catch (error) {
+      console.error('Start error:', error);
       setIsRecording(false);
+      isRecordingRef.current = false;
     }
   };
 
   const handleVoiceStop = (e) => {
     e.preventDefault();
-    if (recognitionRef.current && isRecording) {
-      try { recognitionRef.current.stop(); } catch (e) {}
-      setIsRecording(false);
+    if (!isRecordingRef.current) return;
+    
+    isRecordingRef.current = false;
+    setIsRecording(false);
+    
+    try {
+      recognitionRef.current.stop();
+    } catch (e) {
+      console.error('Stop error:', e);
     }
+    
+    setTimeout(() => {
+      if (recognizedText && recognizedText.trim()) {
+        setShowConfirmDialog(true);
+      }
+    }, 300);
   };
 
   const handleConfirmRecognition = (isQuestion) => {
@@ -122,60 +166,55 @@ const KoreanLearningApp = () => {
         messages: [
           {
             role: 'system',
-            content: `You are a STRICT Korean grammar checker. Follow these rules EXACTLY:
+            content: `You are a Korean grammar checker. Korean allows SUBJECT OMISSION - this is CORRECT grammar.
 
-**RULE 1: Valid Korean sentence MUST have PREDICATE (verb/adjective/이다)**
+**ALWAYS CORRECT (do NOT mark as errors):**
+✅ "여행을 좋아해요" → Subject omitted (나는/저는 implied) = CORRECT
+✅ "밥 먹었어?" → Subject omitted = CORRECT
+✅ "먹었어요" → Subject omitted = CORRECT
+✅ "좋아" → Complete = CORRECT
+✅ "가자" → Complete = CORRECT
+✅ "네" → Complete = CORRECT
 
-VALID (has predicate):
-✅ "밥 먹었어?" → verb 먹다 exists, subject implied = CORRECT
-✅ "먹었어요" → verb 먹다 = CORRECT
-✅ "좋아" → adjective 좋다 = CORRECT
-✅ "가자" → verb 가다 = CORRECT
-✅ "네" → complete interjection = CORRECT
+**ONLY mark these as ERRORS:**
+❌ "밥" → Just noun, no predicate
+❌ "저는 밥" → Subject + noun, no predicate
+❌ "한국어" → Just noun, no predicate
+❌ "먹어 밥" → Wrong word order
 
-INVALID (no predicate):
-❌ "저는" → only subject, NO verb/adjective = ERROR (incomplete)
-❌ "밥" → only noun, NO verb = ERROR (incomplete)
-❌ "저는 밥" → subject + noun, NO verb = ERROR (incomplete)
-❌ "한국어" → only noun = ERROR (incomplete)
-
-**ANALYSIS STEPS:**
-1. Check: Does it have verb/adjective/이다? → YES = likely CORRECT
-2. Check: Complete meaning? → YES = CORRECT
-3. Check: Context makes it complete? → Use wisely
+**RULE:** If sentence has verb/adjective/이다 → CORRECT (even without subject)
 
 **Return JSON:**
 {
   "isCorrect": true/false,
   "corrected": "text with punctuation",
   "errorType": "incomplete|grammar|vocabulary|word-order|none",
-  "explanation": "Vietnamese (ONLY if error)"
+  "explanation": "Vietnamese (ONLY if REAL error)"
 }
 
-**Explanation (if error):**
+**Explanation format (only if error):**
 🔍 Phân tích lỗi:
 - Câu của bạn: "{original}"
-- Phân tích: [có động từ không? có nghĩa hoàn chỉnh không?]
 - Vấn đề: {problem}
 
 ❌ Tại sao sai:
-{Vietnamese why incomplete}
+{Vietnamese explanation}
 
 ✅ Cách sửa:
 - Câu đúng: "{corrected}"
-- Thêm: {what was added}
+- Giải thích: {fix}
 
 📝 Ví dụ:
-1. Sai: "물" → Đúng: "물을 마셔요"
-2. Sai: "나는" → Đúng: "나는 학생이에요"
+1-2 examples
 
-💡 Lưu ý: Câu Hàn cần động từ/tính từ để hoàn chỉnh
+💡 Lưu ý:
+{tip}
 
-**CRITICAL:** Be precise. Only mark REAL incomplete sentences as errors.`
+**CRITICAL:** Subject omission = CORRECT Korean grammar. Only mark real errors.`
           },
           { 
             role: 'user', 
-            content: `Context: ${recentContext || 'First message'}\n\nAnalyze: "${userText}"\n\nCheck: Has verb/adjective/이다? Complete meaning?` 
+            content: `Context: ${recentContext || 'First message'}\n\nAnalyze: "${userText}"\n\nCheck: Has predicate? Subject omission is OK.` 
           }
         ],
         temperature: 0.05
@@ -609,7 +648,7 @@ Be thorough and complete!`
                   <span></span>
                   <span></span>
                 </div>
-                <span style={{fontSize: '14px', color: '#666'}}>AI đang suy nghĩ...</span>
+                <span style={{fontSize: '14px', color: '# 666'}}>AI đang suy nghĩ...</span>
               </div>
             </div>
           </div>
@@ -639,15 +678,16 @@ Be thorough and complete!`
 
         {micPermission === 'granted' && (
           <button
-            onTouchStart={handleVoiceStart}
-            onTouchEnd={handleVoiceStop}
             onMouseDown={handleVoiceStart}
             onMouseUp={handleVoiceStop}
+            onMouseLeave={handleVoiceStop}
+            onTouchStart={handleVoiceStart}
+            onTouchEnd={handleVoiceStop}
             onContextMenu={(e) => e.preventDefault()}
             disabled={isProcessing}
-            style={{width: '100%', padding: '15px', background: isRecording ? '#f44336' : '#4caf50', color: 'white', border: 'none', borderRadius: '25px', cursor: isProcessing ? 'not-allowed' : 'pointer', fontSize: '16px', fontWeight: 'bold', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none'}}
+            style={{width: '100%', padding: '15px', background: isRecording ? '#f44336' : '#4caf50', color: 'white', border: 'none', borderRadius: '25px', cursor: isProcessing ? 'not-allowed' : 'pointer', fontSize: '16px', fontWeight: 'bold', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', transition: 'all 0.2s'}}
           >
-            {isRecording ? '🎤 Đang ghi...' : '🎤 Nhấn giữ để nói'}
+            {isRecording ? '🔴 Thả ra để gửi...' : '🎤 Nhấn giữ để nói'}
           </button>
         )}
       </div>
