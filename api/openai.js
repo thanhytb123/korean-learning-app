@@ -1,14 +1,10 @@
 export default async function handler(req, res) {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,POST');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  // Handle preflight request
   if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
+    return res.status(200).end();
   }
 
   if (req.method !== 'POST') {
@@ -20,57 +16,73 @@ export default async function handler(req, res) {
     const apiKey = process.env.OPENAI_API_KEY;
 
     if (!apiKey) {
-      return res.status(500).json({ error: 'OpenAI API key not configured' });
+      return res.status(500).json({ error: 'API key not configured' });
     }
 
-    // Xử lý Whisper API (audio transcription)
+    // Whisper API
     if (endpoint === '/v1/audio/transcriptions' && isFormData) {
-      const { file, model, language, response_format } = body;
+      const { file, model, language } = body;
       
-      if (!file) {
-        return res.status(400).json({ error: 'No audio file provided' });
-      }
-
-      // Convert base64 to Buffer
+      // Convert base64 to binary
       const audioBuffer = Buffer.from(file, 'base64');
       
-      // Create form data
-      const FormData = require('form-data');
-      const formData = new FormData();
+      // Create proper multipart form data
+      const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
+      const formParts = [];
       
-      formData.append('file', audioBuffer, {
-        filename: 'audio.webm',
-        contentType: 'audio/webm'
-      });
-      formData.append('model', model || 'whisper-1');
-      if (language) formData.append('language', language);
-      if (response_format) formData.append('response_format', response_format);
+      // Add file part
+      formParts.push(`--${boundary}\r\n`);
+      formParts.push(`Content-Disposition: form-data; name="file"; filename="audio.webm"\r\n`);
+      formParts.push(`Content-Type: audio/webm\r\n\r\n`);
+      formParts.push(audioBuffer);
+      formParts.push(`\r\n`);
+      
+      // Add model part
+      formParts.push(`--${boundary}\r\n`);
+      formParts.push(`Content-Disposition: form-data; name="model"\r\n\r\n`);
+      formParts.push(model || 'whisper-1');
+      formParts.push(`\r\n`);
+      
+      // Add language part
+      if (language) {
+        formParts.push(`--${boundary}\r\n`);
+        formParts.push(`Content-Disposition: form-data; name="language"\r\n\r\n`);
+        formParts.push(language);
+        formParts.push(`\r\n`);
+      }
+      
+      formParts.push(`--${boundary}--\r\n`);
+      
+      const formBody = Buffer.concat(
+        formParts.map(part => 
+          typeof part === 'string' ? Buffer.from(part, 'utf8') : part
+        )
+      );
 
-      // Call OpenAI Whisper API
       const fetch = (await import('node-fetch')).default;
-      const whisperResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${apiKey}`,
-          ...formData.getHeaders()
+          'Content-Type': `multipart/form-data; boundary=${boundary}`
         },
-        body: formData
+        body: formBody
       });
 
-      if (!whisperResponse.ok) {
-        const errorText = await whisperResponse.text();
-        console.error('Whisper API error:', errorText);
-        return res.status(whisperResponse.status).json({ 
-          error: 'Whisper API failed',
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Whisper error:', errorText);
+        return res.status(response.status).json({ 
+          error: 'Whisper failed',
           details: errorText 
         });
       }
 
-      const result = await whisperResponse.json();
+      const result = await response.json();
       return res.status(200).json(result);
     }
 
-    // Xử lý TTS API (audio/speech)
+    // TTS API
     if (endpoint === '/v1/audio/speech') {
       const fetch = (await import('node-fetch')).default;
       const response = await fetch(`https://api.openai.com${endpoint}`, {
@@ -83,17 +95,15 @@ export default async function handler(req, res) {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        return res.status(response.status).json({ error: errorText });
+        return res.status(response.status).json({ error: await response.text() });
       }
 
-      // Return audio as blob
       const audioBuffer = await response.buffer();
       res.setHeader('Content-Type', 'audio/mpeg');
       return res.status(200).send(audioBuffer);
     }
 
-    // Xử lý Chat Completions API
+    // Chat API
     if (endpoint === '/v1/chat/completions') {
       const fetch = (await import('node-fetch')).default;
       const response = await fetch(`https://api.openai.com${endpoint}`, {
@@ -106,21 +116,16 @@ export default async function handler(req, res) {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        return res.status(response.status).json({ error: errorText });
+        return res.status(response.status).json({ error: await response.text() });
       }
 
-      const result = await response.json();
-      return res.status(200).json(result);
+      return res.status(200).json(await response.json());
     }
 
     return res.status(400).json({ error: 'Invalid endpoint' });
 
   } catch (error) {
     console.error('API Error:', error);
-    return res.status(500).json({ 
-      error: 'Internal server error',
-      message: error.message 
-    });
+    return res.status(500).json({ error: error.message });
   }
 }
